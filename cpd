@@ -102,13 +102,26 @@ nextJobId() {
   echo "$id"
 }
 
+addToJobFile() {
+  # Need parms: id key value
+  printf "%s:%s:%s\n" "$1" "$2" "$3" >> "$jobFile"
+}
+
+modifyJob() {
+  # Need parms: id key newValue
+  sed -i -e "s,^\($1:$2:\).*,\1$3," "$jobFile"
+}
+
+getJobValue() {
+  # Need parms: id key, Returns value
+  local line=$(grep "^$1:$2:" "$jobFile")
+  echo ${line#[0-9]*:[A-Z]*:} # No quotes here removes unneeded spaces
+}
+
 changeStatus() {
   # Need parms: id newStatus
   setLock
-  awk -v ID="$1" -v STATUS="$2" '{ if ($1 == ID) $3 = STATUS; print $0}' \
-    "$jobFile" > "$jobFile-modified"
-
-  mv "$jobFile-modified" "$jobFile"
+  modifyJob $1 "STATUS" $2
   unLock
 }
 
@@ -116,29 +129,36 @@ changeStatus() {
 # Command Implementations
 #
 cmdList() {
+  # TODO: Add options for different kind of display. The are so much
+  # possibilities, filters, sort order, show as ticket, selected fields...
   if [[ -f "$jobFile" ]] ; then
-    out " ID PRIO STATUS   DONE DATE                 DRIVE            ARGUMENTS"
-    while read id prio status done date drive cmd
+    local txt=" ID PRIO STATUS   DONE  DRIVE            TARGET                ARGUMENTS"
+    # Is that the right way to adjust to terminal width?
+    local cols=$(stty size|cut -d' ' -f2)
+    out "${txt:0:$cols}"
+
+    # FIXME: Holy crap! Is that slow :-/ Speed me up!
+    read max < "$tmpDir/next-id"
+    for (( id=1; id < max; id++ ))
     do
-      printf "%3s   %s  %-7s  %3s  %s  %-15s  %s\n"   \
-      "$id" "$prio" "$status" "$done" "$date" "$drive" "$cmd"
-    done < "$jobFile"
+      printf -v txt "%3s   %s  %-8s  %3s  %-15s  %-20s  %s"   \
+        "$id" "$(getJobValue $id PRIO)" "$(getJobValue $id STATUS)" \
+        "$(getJobValue $id DONE)" "$(getJobValue $id DRIVE)"         \
+        "$(getJobValue $id TARGET|rev|cut -c -21|rev)" "$(getJobValue $id ARGUMENTS)"
+
+      out "${txt:0:$cols}"
+    done
   else
-    out "No pending jobs"
+    out "No jobs to list"
   fi
 }
 
-cmdDelete() {
+cmdCancel() {
   checkJobId "$1"
   local id="$1"
 
-  cmdStop "$id"
-
-  setLock
-  out "Delete job $id: $(grep "^$id" "$jobFile" | cut -d' ' -f6- )"
-  grep -v "^$id" "$jobFile" > "$jobFile-modified"
-  mv "$jobFile-modified" "$jobFile"
-  unLock
+  out "Cancel job $id: $(getJobValue $id "ARGUMENTS")"
+  changeStatus "$id" "CANCEL"
 }
 
 cmdResume() {
@@ -154,7 +174,7 @@ cmdStop() {
   local id="$1"
 
   out "Stop job $id"
-  changeStatus "$id" "STOPing"
+  changeStatus "$id" "STOPPING"
 }
 
 cmdChangePrio() {
@@ -165,31 +185,23 @@ cmdChangePrio() {
   local id="$1"
   local prio="$2"
 
-#   if [[ ! -f "$jobFile" ]] ; then
-#     out "No jobs available"
-#     return
-#   fi
-
-  setLock
   out "Change priority of job $id to $prio"
-  awk -v ID=$id -v PRIO=$prio '{ if ($1 == ID) $2 = PRIO; print $0}' \
-    "$jobFile" > "$jobFile-modified"
-
-  mv "$jobFile-modified" "$jobFile"
+  setLock
+  modifyJob $id "PRIO" $prio
   unLock
 }
 
 #
 #
 #
-addNewJob() {
-  local dest
 
+addNewJob() {
   # Get the destination drive
   # FIXME: As long we have plain drives all is nice, but with mappers, raid or
   # what ever other hell, I think there is now way to get the real drive(?)
   # Therefore we build poor fake drives as workaround
-  dest=$(df -P "$1" | tail -n1 | cut -d' ' -f1)   # Now /dev/foo/drive123
+  local dest=$(df -P "$1" | tail -n1 | cut -d' ' -f1)   # Now /dev/foo/drive123
+#   dest="/dev/mapper/luks-a92dcc6e-24b3-4f25-96c4-342eb7fc76dc"
   if [[ "$dest" =~ /dev/mapper ]] ; then
     dest=${dest#/dev/mapper/}
     dest=${dest:0:13}           # Use only first part of full name
@@ -199,18 +211,22 @@ addNewJob() {
 
   checkTmpDir
   setLock
-  # <id> <priority> <status> <done> <date> <dest> <job>
-  # 1 2 pending 0% 2017-11-06T15:23:39 cp foo bar
-  # FIXME: Would be nice to have a progress info in <done>.
-  #        Could be achived by pre find-ing all source files, sum each size
-  # and copy one file after the other.
-  # NOTE: Not sure if <date> is useful
+  # FIXME: Would be nice to have a progress info in DONE.
+  # Could be achieved by pre find-ing all source files, sum each size and copy
+  # one file after the other.
+  # NOTE: Not sure if DATE is useful
   newId=$(nextJobId)
   out "New job: $newId  cp -t $*"
 
-  printf "%s %s %s %s %(%FT%T)T %s %s %s\n"                    \
-    "$newId" "$defPriority" "pending" "?" "-1" "$dest" "$PWD" "$*" \
-    >> "$jobFile"
+  addToJobFile "$newId" "PRIO" "$defPriority"
+  addToJobFile "$newId" "STATUS" "pending"
+  addToJobFile "$newId" "DONE" "?"
+  addToJobFile "$newId" "DATE" "$(printf "%(%FT%T)T" "-1")"
+  addToJobFile "$newId" "DRIVE" "$dest"
+  addToJobFile "$newId" "HOME" "$PWD"        # Needed, the daemon run in /
+  addToJobFile "$newId" "TARGET" "${1@Q}"    # Arguments will quoted
+  shift
+  addToJobFile "$newId" "ARGUMENTS" "${*@Q}"
 
   unLock
 }
@@ -242,8 +258,8 @@ do
         out "  $me <command> [<argument>...]"
         out ""
         out "${txtBold}Commands are:${txtClean}"
-        out "  -D <job-id>        Delete a job"
-        out "  -h [c]             This help text, c=l License, c=s Source of $me"
+        out "  -C <job-id>        Cancel a job"
+        out "  -h [c]             Show this help or when c=l License, c=s Source of $me"
         out "  -l                 List jobs"
         out "  -p <job-id> <prio> Change job priority"
         out "  -r <job-id>        Resume a job"
@@ -266,11 +282,11 @@ do
 done
 
 OPTIND="1"
-while getopts ?D:lp:r:s: opt
+while getopts ?C:lp:r:s: opt
 do
   case $opt in
 
-    D)  cmdDelete $OPTARG         ; exit ; ;;
+    C)  cmdCancel $OPTARG         ; exit ; ;;
     l)  cmdList                   ; exit ; ;;
     p)  shift $(( $OPTIND - 1 ))
         cmdChangePrio $OPTARG $@  ; exit ; ;;
