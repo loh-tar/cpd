@@ -25,6 +25,8 @@ declare -r vDate="Nov 2017"
 
 declare -r tmpDir="/tmp/$me/user-$(id -un)"
 declare -r jobFile="$tmpDir/jobs"               # All jobs as key/value
+declare -r jobList="$tmpDir/joblst"             # Subset of jobFile as handy table
+declare -A jobData=()                           # Will filled with data of jobFile
 
 declare -r defPriority="2"                      # Default job priority
 
@@ -125,6 +127,19 @@ changeStatus() {
   unLock
 }
 
+readJobs() {
+  local key val
+
+  jobData=()
+
+  while read line
+  do
+    val=${line#[0-9]*:[A-Z]*:}
+    key=${line%:${val}}
+    jobData[$key]=$val
+  done < "$jobFile"
+}
+
 #
 # Command Implementations
 #
@@ -137,14 +152,23 @@ cmdList() {
     local cols=$(stty size|cut -d' ' -f2)
     out "${txt:0:$cols}"
 
-    # FIXME: Holy crap! Is that slow :-/ Speed me up!
+    readJobs
     read max < "$tmpDir/next-id"
     for (( id=1; id < max; id++ ))
     do
-      printf -v txt "%3s   %s  %-8s  %3s  %-15s  %-20s  %s"   \
-        "$id" "$(getJobValue $id PRIO)" "$(getJobValue $id STATUS)" \
-        "$(getJobValue $id DONE)" "$(getJobValue $id DRIVE)"         \
-        "$(getJobValue $id TARGET|rev|cut -c -21|rev)" "$(getJobValue $id ARGUMENTS)"
+      # Some effort to cut TARGET from the left side to fit into table
+      # I did't get it with some printf format :-/
+      local tl=${#jobData["$id:TARGET"]}
+      if (( tl > 20 )) ; then
+        local target="~${jobData["$id:TARGET"]:((tl-19)):$tl}"
+      else
+        local target=${jobData["$id:TARGET"]}
+      fi
+
+      printf -v txt "%3s   %s  %-8s  %3s  %-15s  %-20s  %s"       \
+        "$id" "${jobData["$id:PRIO"]}" "${jobData["$id:STATUS"]}" \
+        "${jobData["$id:DONE"]}" "${jobData["$id:DRIVE"]}"        \
+        "$target" "${jobData["$id:ARGUMENTS"]}"
 
       out "${txt:0:$cols}"
     done
