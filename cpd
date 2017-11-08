@@ -28,8 +28,6 @@ declare -r jobFile="$tmpDir/jobs"               # All jobs as key/value
 declare -r jobList="$tmpDir/joblst"             # Subset of jobFile as handy table
 declare -A jobData=()                           # Will filled with data of jobFile
 
-declare -r defPriority="2"                      # Default job priority
-
 # Colored text...
 # FIXME: Add test if terminal is capable of colored output or if output goes to file/pipe
 declare    txtBold=$'\e[1m'                     # Or bright, depend on your terminal
@@ -124,6 +122,10 @@ changeStatus() {
   # Need parms: id newStatus
   setLock
   modifyJob $1 "STATUS" $2
+  [[ "STOPPING RESUME CANCEL" =~ $2 ]] && modifyJob $1 "PRIO" "0"
+  [[ "running" =~ $2 ]]                && modifyJob $1 "PRIO" "1"
+  [[ "stopped" =~ $2 ]]                && modifyJob $1 "PRIO" "2"
+  [[ "done canceled" =~ $2 ]]          && modifyJob $1 "PRIO" "9"
   unLock
 }
 
@@ -246,7 +248,10 @@ addNewJob() {
   newId=$(nextJobId)
   out "New job: $newId  cp -t $*"
 
-  addToJobFile "$newId" "PRIO" "$defPriority"
+  # PRIOrity is associated to STATUS as follows
+  # STOPPING RESUME CANCEL running stopped pending done canceled
+  #    0        0     0        1      2      3-8     9     9
+  addToJobFile "$newId" "PRIO" "5"
   addToJobFile "$newId" "STATUS" "pending"
   addToJobFile "$newId" "DONE" "?"
   addToJobFile "$newId" "DATE" "$(printf "%(%FT%T)T" "-1")"
@@ -289,13 +294,14 @@ do
         out "  -C <job-id>        Cancel a job"
         out "  -h [c]             Show this help or when c=l License, c=s Source of $me"
         out "  -l                 List jobs"
-        out "  -p <job-id> <prio> Change job priority"
+        out "  -p <job-id> <prio> Change job priority 3-8"
         out "  -r <job-id>        Resume a job"
         out "  -s <job-id>        Stop a job"
         out ""
         out "${txtBold}Notes:${txtClean}"
         out "  • The first form schedule a new copy task"
         out "  • The second form list or change tasks"
+        out "  • The job priority is not static and affect only the start time. Highest priority is 0"
         out "  • The executed copy command will be 'cp -t <dest-dir> <source>' no extras, sorry"
         out ""
         out "${txtBold}Examples:${txtClean}"
