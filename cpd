@@ -166,41 +166,74 @@ readJobs() {
   done < "$jobFile"
 }
 
+cutLeft() {
+  # Need parms: width string
+
+  # Some effort to cut string from the left side to fit into table
+  # I did't get it with some printf format :-/
+  local length=${#2}
+  local str=$2
+
+  (( length > $1 )) && str="~${2:((length - $1 + 1)):$length}"
+
+  echo "$str"
+}
+
 #
 # Command Implementations
 #
 cmdList() {
-  # TODO: Add options for different kind of display. The are so much
-  # possibilities, filters, sort order, show as ticket, selected fields...
-  if [[ -f "$jobFile" ]] ; then
-    local txt=" ID PRIO STATUS   DONE  DRIVE            TARGET                ARGUMENTS"
-    # Is that the right way to adjust to terminal width?
-    local cols=$(stty size|cut -d' ' -f2)
-    out "${txt:0:$cols}"
+  # TODO: Add more options for different kind of display. The are so much
+  # possibilities: filters, sort order, show as ticket, selected fields...
+  local type="$1"
+  [[ -f "$jobFile" ]] || type="NoJobs"
 
-    readJobs
-    read max < "$tmpDir/next-id"
-    for (( id=1; id < max; id++ ))
-    do
-      # Some effort to cut TARGET from the left side to fit into table
-      # I did't get it with some printf format :-/
-      local tl=${#jobData["$id:TARGET"]}
-      if (( tl > 20 )) ; then
-        local target="~${jobData["$id:TARGET"]:((tl-19)):$tl}"
-      else
-        local target=${jobData["$id:TARGET"]}
-      fi
-
-      printf -v txt "%3s   %s  %-8s  %3s  %-15s  %-20s  %s"       \
-        "$id" "${jobData["$id:PRIO"]}" "${jobData["$id:STATUS"]}" \
-        "${jobData["$id:DONE"]}" "${jobData["$id:DRIVE"]}"        \
-        "$target" "${jobData["$id:ARGUMENTS"]}"
-
+  case "$type" in
+    NoJobs)
+      out "No jobs to list"
+      ;;
+    *)
+      local txt=" ID PRIO STATUS   DONE  DRIVE            TARGET                ARGUMENTS"
+      local format="%3s   %s  %-8s  %3s  %-15s  %-20s  %s"
+      # Is that the right way to adjust to terminal width?
+      local cols=$(stty size|cut -d' ' -f2)
       out "${txt:0:$cols}"
-    done
-  else
-    out "No jobs to list"
-  fi
+      readJobs
+      ;;&
+
+    i|-li)
+      read max < "$tmpDir/next-id"
+      for (( id=1; id < max; id++ ))
+      do
+        local target=$(cutLeft "20" "${jobData["$id:TARGET"]}")
+
+        printf -v txt "$format"                                     \
+          "$id" "${jobData["$id:PRIO"]}" "${jobData["$id:STATUS"]}" \
+          "${jobData["$id:DONE"]}" "${jobData["$id:DRIVE"]}"        \
+          "$target" "${jobData["$id:ARGUMENTS"]}"
+
+        out "${txt:0:$cols}"
+      done
+      ;;
+
+    *)
+      setLock || exit 1
+      updateJobList
+      unLock
+
+      while read id prio date status drive
+      do
+        local target=$(cutLeft "20" "${jobData["$id:TARGET"]}")
+
+        printf -v txt "$format"                                     \
+          "$id" "$prio" "$status" "${jobData["$id:DONE"]}"          \
+          "$drive" "$target" "${jobData["$id:ARGUMENTS"]}"
+
+        out "${txt:0:$cols}"
+      done < "$jobList"
+      ;;
+
+  esac
 }
 
 cmdCancel() {
@@ -321,7 +354,7 @@ do
         out "${txtBold}Commands are:${txtClean}"
         out "  -C <job-id>        Cancel a job"
         out "  -h [c]             Show this help or when c=l License, c=s Source of $me"
-        out "  -l                 List jobs"
+        out "  -l [c]             List jobs, c=i by ID"
         out "  -p <job-id> <prio> Change job priority 3-8"
         out "  -r <job-id>        Resume a job"
         out "  -s <job-id>        Stop a job"
@@ -349,7 +382,8 @@ do
   case $opt in
 
     C)  cmdCancel $OPTARG         ; exit ; ;;
-    l)  cmdList                   ; exit ; ;;
+    l)  shift $(( $OPTIND - 1 ))
+        cmdList $1                ; exit ; ;;
     p)  shift $(( $OPTIND - 1 ))
         cmdChangePrio $OPTARG $@  ; exit ; ;;
     r)  cmdResume $OPTARG         ; exit ; ;;
