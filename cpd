@@ -205,6 +205,7 @@ cmdChangePrio() {
   [[ "$#" -ne 2 ]] && exitError "Need two arguments"
   checkJobId "$1"
   [[ "$2" =~ ^[0-9]+$ ]] || exitError "Not a positive integer: $2"
+  (( "$2" > 8 || "$2" < 3 )) && exitError "Priority must be 3-8 not: $2"
 
   local id="$1"
   local prio="$2"
