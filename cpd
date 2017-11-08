@@ -107,6 +107,30 @@ addToJobFile() {
   printf "%s:%s:%s\n" "$1" "$2" "$3" >> "$jobFile"
 }
 
+addToJobList() {
+  # Need parms: ID PRIO DATE STATUS DRIVE
+  printf "%s %s %s %s %s \n" "$@" >> "$jobList"
+}
+
+sortJobList() {
+  sort -k 2,3 "$jobList" > "$jobList-tmp"
+  mv "$jobList-tmp" "$jobList"
+}
+
+updateJobList() {
+  readJobs
+  rm -f "$jobList"
+
+  read max < "$tmpDir/next-id"
+  for (( id=1; id < max; id++ ))
+  do
+    addToJobList "$id" "${jobData["$id:PRIO"]}" "${jobData["$id:DATE"]}" \
+                 "${jobData["$id:STATUS"]}" "${jobData["$id:DRIVE"]}"
+  done
+
+  sortJobList
+}
+
 modifyJob() {
   # Need parms: id key newValue
   sed -i -e "s,^\($1:$2:\).*,\1$3," "$jobFile"
@@ -218,6 +242,7 @@ cmdChangePrio() {
   out "Change priority of job $id to $prio"
   setLock
   modifyJob $id "PRIO" $prio
+  updateJobList
   unLock
 }
 
@@ -230,13 +255,12 @@ addNewJob() {
   # FIXME: As long we have plain drives all is nice, but with mappers, raid or
   # what ever other hell, I think there is now way to get the real drive(?)
   # Therefore we build poor fake drives as workaround
-  local dest=$(df -P "$1" | tail -n1 | cut -d' ' -f1)   # Now /dev/foo/drive123
-#   dest="/dev/mapper/luks-a92dcc6e-24b3-4f25-96c4-342eb7fc76dc"
-  if [[ "$dest" =~ /dev/mapper ]] ; then
-    dest=${dest#/dev/mapper/}
-    dest=${dest:0:13}           # Use only first part of full name
+  local drive=$(df -P "$1" | tail -n1 | cut -d' ' -f1)   # Now /dev/foo/drive123
+  if [[ "$drive" =~ /dev/mapper ]] ; then
+    drive=${drive#/dev/mapper/}
+    drive=${drive:0:13}           # Use only first part of full name
   else
-    dest=${dest%%[0-9]*}        # Drive only matters, not partition
+    drive=${drive%%[0-9]*}        # Drive only matters, not partition
   fi
 
   checkTmpDir
@@ -244,7 +268,6 @@ addNewJob() {
   # FIXME: Would be nice to have a progress info in DONE.
   # Could be achieved by pre find-ing all source files, sum each size and copy
   # one file after the other.
-  # NOTE: Not sure if DATE is useful
   newId=$(nextJobId)
   out "New job: $newId  cp -t $*"
 
@@ -254,12 +277,17 @@ addNewJob() {
   addToJobFile "$newId" "PRIO" "5"
   addToJobFile "$newId" "STATUS" "pending"
   addToJobFile "$newId" "DONE" "?"
-  addToJobFile "$newId" "DATE" "$(printf "%(%FT%T)T" "-1")"
-  addToJobFile "$newId" "DRIVE" "$dest"
+  local date=$(printf "%(%FT%T)T" "-1")
+  addToJobFile "$newId" "DATE" "$date"
+  addToJobFile "$newId" "DRIVE" "$drive"
   addToJobFile "$newId" "HOME" "$PWD"        # Needed, the daemon run in /
   addToJobFile "$newId" "TARGET" "${1@Q}"    # Arguments will quoted
   shift
   addToJobFile "$newId" "ARGUMENTS" "${*@Q}"
+
+  # Don't be lazy and call updateJobList, this way is cheaper
+  addToJobList "$newId" "5" "$date" "pending" "$drive"
+  sortJobList
 
   unLock
 }
