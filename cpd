@@ -210,6 +210,9 @@ cmdChangePrio() {
   local id="$1"
   local prio="$2"
 
+  local status=$(getJobValue "$1" "STATUS")
+  [[ "$status" == "pending" ]] || exitError "Job is '$status', you can only change 'pending' jobs"
+
   out "Change priority of job $id to $prio"
   setLock
   modifyJob $id "PRIO" $prio
