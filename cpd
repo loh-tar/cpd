@@ -192,6 +192,20 @@ cutLeft() {
 #
 # Command Implementations
 #
+outJobLine() {
+  local id="$1"
+  local format="$2"
+  local cols="$3"
+  local target=$(cutLeft "20" "${jobData["$id:TARGET"]}")
+
+  printf -v txt "$format"                                     \
+    "$id" "${jobData["$id:PRIO"]}" "${jobData["$id:STATUS"]}" \
+    "${jobData["$id:DONE"]}" "${jobData["$id:DRIVE"]}"        \
+    "$target" "${jobData["$id:ARGUMENTS"]}"
+
+  out "${txt:0:$cols}"
+}
+
 cmdList() {
   # TODO: Add more options for different kind of display. The are so much
   # possibilities: filters, sort order, show as ticket, selected fields...
@@ -215,14 +229,7 @@ cmdList() {
       read max < "$tmpDir/next-id"
       for (( id=1; id < max; id++ ))
       do
-        local target=$(cutLeft "20" "${jobData["$id:TARGET"]}")
-
-        printf -v txt "$format"                                     \
-          "$id" "${jobData["$id:PRIO"]}" "${jobData["$id:STATUS"]}" \
-          "${jobData["$id:DONE"]}" "${jobData["$id:DRIVE"]}"        \
-          "$target" "${jobData["$id:ARGUMENTS"]}"
-
-        out "${txt:0:$cols}"
+        outJobLine "$id" "$format" "$cols"
       done
       ;;
 
@@ -233,13 +240,7 @@ cmdList() {
 
       while read id prio date status drive
       do
-        local target=$(cutLeft "20" "${jobData["$id:TARGET"]}")
-
-        printf -v txt "$format"                                     \
-          "$id" "$prio" "$status" "${jobData["$id:DONE"]}"          \
-          "$drive" "$target" "${jobData["$id:ARGUMENTS"]}"
-
-        out "${txt:0:$cols}"
+        outJobLine "$id" "$format" "$cols"
       done < "$jobList"
       ;;
 
