@@ -44,6 +44,12 @@ error() {
   out "Error: $1" >&2
 }
 
+info() {
+  local format="$1"
+  shift
+  printf "$format" "$@" >&2
+}
+
 exitError() {
   error "$*"
   exit 1
@@ -80,15 +86,19 @@ setLock() {
     if rm "$tmpDir/not-locked" 2>/dev/null
     then
       echo "Locked by pid $$ at $(date -Is)" > "$tmpDir/locked-by"
+      [[ $i -gt 0 ]] && info "OK\n"
       return # Good!
     else
-      echo lock2 $i
-      sleep 0.2
       i=$(( i+1 ))
-      if [[ $i -eq 5 ]] ; then
-        out "Can't get lock"
-        cat "$tmpDir/locked-by" 2>/dev/null
-        exit 1
+      if (( i == 1 ))
+        then info "Try to lock2..."
+        else info "."
+      fi
+
+      sleep $(echo "0.3 * $i" | bc)
+      if [[ $i -eq 7 ]] ; then
+        info "FAIL!\n"
+        exitError "Can't get lock\n $(cat "$tmpDir/locked-by" 2>/dev/null)"
       fi
     fi
   done
@@ -336,10 +346,10 @@ while getopts :h: opt # Keep help recognition away from other options
 do
   [ "$opt" != "h" -a "$OPTARG" != "h" ] && continue
   case $OPTARG in
-    l)  echo ""
+    l)  out ""
         # Adjust -B4 in case of copyright changes
         grep -B4 -A13 -m1 "This program is free software" "$0" | cut -b2-
-        echo ""
+        out ""
         exit ; ;;
 
     s)  less "$0"
@@ -389,13 +399,12 @@ do
     r)  cmdResume $OPTARG         ; exit ; ;;
     s)  cmdStop $OPTARG           ; exit ; ;;
 
-    \?) echo "Need help? Use: $me -h" >&2
-        exit 1                           ; ;;
+    \?) exitError "Need help? Use: $me -h"  ; ;;
 
   esac
 done
 
-# At this point we have a new job to enque
+# At this point we have a new job to enqueue
 [[ -d "$1" ]] || exitError "Destination must be directory"
 addNewJob "$@"
 
