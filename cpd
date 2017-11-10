@@ -123,28 +123,23 @@ addToJobFile() {
   printf "%s:%s:%s\n" "$1" "$2" "$3" >> "$jobFile"
 }
 
-addToJobList() {
-  # Need parms: ID PRIO DATE STATUS DRIVE
-  printf "%s %s %s %s %s \n" "$@" >> "$jobList"
-}
-
-sortJobList() {
-  sort -k 2,3 "$jobList" > "$jobList-tmp"
-  mv "$jobList-tmp" "$jobList"
-}
-
 updateJobList() {
+  # Do NOT call updateJobList after add or change a job!
+  # That would confuse processJobList
   readJobs
   rm -f "$jobList"
 
   read max < "$tmpDir/next-id"
   for (( id=1; id < max; id++ ))
   do
-    addToJobList "$id" "${jobData["$id:PRIO"]}" "${jobData["$id:DATE"]}" \
-                 "${jobData["$id:STATUS"]}" "${jobData["$id:DRIVE"]}"
+    printf "%s %s %s %s %s\n"                                 \
+      "$id" "${jobData["$id:PRIO"]}" "${jobData["$id:DATE"]}" \
+      "${jobData["$id:STATUS"]}" "${jobData["$id:DRIVE"]}"    \
+      >> "$jobList"
   done
 
-  sortJobList
+  sort -k 2,3 "$jobList" > "$jobList-tmp"
+  mv "$jobList-tmp" "$jobList"
 }
 
 modifyJob() {
@@ -296,7 +291,6 @@ cmdChangePrio() {
   out "Change priority of job $id to $prio"
   setLock || exitError "Job not changed"
   modifyJob $id "PRIO" $prio
-  updateJobList
   unLock
 }
 
@@ -338,10 +332,6 @@ addNewJob() {
   addToJobFile "$newId" "TARGET" "${1@Q}"    # Arguments will quoted
   shift
   addToJobFile "$newId" "ARGUMENTS" "${*@Q}"
-
-  # Don't be lazy and call updateJobList, this way is cheaper
-  addToJobList "$newId" "5" "$date" "pending" "$drive"
-  sortJobList
 
   unLock
 }
