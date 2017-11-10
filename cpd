@@ -77,8 +77,11 @@ unLock(){
 }
 
 setLock() {
-  # Semaphore inspired by
+  # Call setLock only from top level functions like cmdFoo,
+  # we want protect from second process not the own process
+  # Mutex functionality inspired by
   # http://mywiki.wooledge.org/BashFAQ/045
+
   local i=0
 
   while : ;
@@ -86,19 +89,22 @@ setLock() {
     if rm "$tmpDir/not-locked" 2>/dev/null
     then
       echo "Locked by pid $$ at $(date -Is)" > "$tmpDir/locked-by"
-      [[ $i -gt 0 ]] && info "OK\n"
-      return # Good!
+      [[ $i -gt 1 ]] && info "OK\n"
+      return 0 # Good!
     else
       i=$(( i+1 ))
-      if (( i == 1 ))
-        then info "Try to lock2..."
-        else info "."
+      # Try some without to print info
+      if (( i > 3 ))
+        then info "."
+      elif (( i == 3 ))
+        then info "Try to lock..."
       fi
 
-      sleep $(echo "0.3 * $i" | bc)
+      sleep $(echo "0.3 + 0.4 * $i" | bc)
       if [[ $i -eq 7 ]] ; then
         info "FAIL!\n"
-        exitError "Can't get lock\n $(cat "$tmpDir/locked-by" 2>/dev/null)"
+        error "Can't get lock\n$(cat "$tmpDir/locked-by" 2>/dev/null)"
+        return 1 # Bad!
       fi
     fi
   done
@@ -154,13 +160,11 @@ getJobValue() {
 
 changeStatus() {
   # Need parms: id newStatus
-  setLock
   modifyJob $1 "STATUS" $2
   [[ "STOPPING RESUME CANCEL" =~ $2 ]] && modifyJob $1 "PRIO" "0"
   [[ "running" =~ $2 ]]                && modifyJob $1 "PRIO" "1"
   [[ "stopped" =~ $2 ]]                && modifyJob $1 "PRIO" "2"
   [[ "done canceled" =~ $2 ]]          && modifyJob $1 "PRIO" "9"
-  unLock
 }
 
 readJobs() {
@@ -252,7 +256,9 @@ cmdCancel() {
   local id="$1"
 
   out "Cancel job $id: $(getJobValue $id "ARGUMENTS")"
+  setLock || exitError "Job not canceled"
   changeStatus "$id" "CANCEL"
+  unLock
 }
 
 cmdResume() {
@@ -260,7 +266,9 @@ cmdResume() {
   local id="$1"
 
   out "Resume job $id"
+  setLock || exitError "Job not resumed"
   changeStatus "$id" "RESUME"
+  unLock
 }
 
 cmdStop() {
@@ -268,7 +276,9 @@ cmdStop() {
   local id="$1"
 
   out "Stop job $id"
+  setLock || exitError "Job not stopped"
   changeStatus "$id" "STOPPING"
+  unLock
 }
 
 cmdChangePrio() {
@@ -284,7 +294,7 @@ cmdChangePrio() {
   [[ "$status" == "pending" ]] || exitError "Job is '$status', you can only change 'pending' jobs"
 
   out "Change priority of job $id to $prio"
-  setLock
+  setLock || exitError "Job not changed"
   modifyJob $id "PRIO" $prio
   updateJobList
   unLock
@@ -308,7 +318,7 @@ addNewJob() {
   fi
 
   checkTmpDir
-  setLock
+  setLock || exitError "Job not added"
   # FIXME: Would be nice to have a progress info in DONE.
   # Could be achieved by pre find-ing all source files, sum each size and copy
   # one file after the other.
