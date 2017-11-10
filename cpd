@@ -295,8 +295,105 @@ cmdChangePrio() {
 }
 
 #
+# Here is the Beef!
 #
-#
+
+startJob() {
+  changeStatus "$1" "running"
+  info "OK\n"
+}
+
+stopJob() {
+  changeStatus "$1" "stopped"
+  info ", OK\n"
+}
+
+resumeJob() {
+  changeStatus "$1" "running"
+  info ", OK\n"
+}
+
+cancelJob() {
+  changeStatus "$1" "canceled"
+  info ", OK\n"
+}
+
+procInfo() {
+  # Need parms: id status resource
+  info "Job %3s is %-17s %-15s" "$1" "$2" "$3"
+}
+
+processJobList() {
+  if ! setLock ; then  error "List not processed"; return 1; fi
+  updateJobList
+  busyDrives=()
+
+  while read id prio date status drive
+  do
+    case $prio in
+      0)
+        case $status in
+          STOPPING)
+            procInfo "$id" "said to stop..."
+            stopJob "$id"
+          ;;
+
+          RESUME)
+            procInfo "$id" "said to resume..."
+            if [[ ${busyDrives[@]} =~ $drive ]] ; then
+              info ", Must wait\n"
+            else
+              resumeJob "$id"
+              busyDrives+=($drive)
+            fi
+          ;;
+
+          CANCEL)
+            procInfo "$id" "said to cancel..."
+            cancelJob "$id"
+          ;;
+
+          *)
+            error "Error not handled: ID:$id PRIO:$prio STATUS:$status"
+          ;;
+
+        esac
+      ;;
+
+      1)
+        info "Job %3s is running using     %s\n" "$id" "$drive"
+        busyDrives+=($drive)
+      ;;
+
+      2)
+        info "Job %3s is stopped would use %s\n" "$id" "$drive"
+      ;;
+
+      [3-8])
+        procInfo "$id" "waiting for" "$drive"
+        if [[ ${busyDrives[@]} =~ $drive ]] ; then
+          info ", Must wait\n"
+        else
+          info ", Start job..."
+          startJob "$id"
+          busyDrives+=($drive)
+        fi
+      ;;
+
+      9)
+        # No more todo, only done and canceled jobs left
+        break
+        ;;
+      *)
+        # Should never happens
+        error "Ignored job ID:$id PRIO:$prio STATUS:$status\n"
+      ;;
+    esac
+  done < "$jobList"
+
+  unLock
+  info "Busy Drives: ${busyDrives[*]}\n"
+}
 
 addNewJob() {
   # Get the destination drive
@@ -388,10 +485,12 @@ do
 done
 
 OPTIND="1"
-while getopts ?C:lp:r:s: opt
+while getopts ?C:lp:Pr:s: opt
 do
   case $opt in
-
+    # Hidden/Intern commands, not intended for daily use
+    P)  processJobList            ; exit ; ;;
+    # Documented commands
     C)  cmdCancel $OPTARG         ; exit ; ;;
     l)  shift $(( $OPTIND - 1 ))
         cmdList $1                ; exit ; ;;
@@ -401,7 +500,6 @@ do
     s)  cmdStop $OPTARG           ; exit ; ;;
 
     \?) exitError "Need help? Use: $me -h"  ; ;;
-
   esac
 done
 
