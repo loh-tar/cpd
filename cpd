@@ -422,7 +422,7 @@ addNewJob() {
   addToJobFile "$newId" "PRIO" "5"
   addToJobFile "$newId" "STATUS" "pending"
   addToJobFile "$newId" "DONE" "?"
-  local date=$(printf "%(%FT%T)T" "-1")
+  printf -v date "%(%FT%T)T" "-1"
   addToJobFile "$newId" "DATE" "$date"
   addToJobFile "$newId" "DRIVE" "$drive"
   addToJobFile "$newId" "HOME" "$PWD"        # Needed, the daemon run in /
@@ -509,7 +509,7 @@ addNewJob "$@"
 
 # Check if daemon is running
 if [[ -f "$tmpDir/daemon-pid" ]] ; then
-  pid1=$(cat "$tmpDir/daemon-pid")
+  pid1=$(< "$tmpDir/daemon-pid")
   pid2=$(ps -C $me -o pid=)
   [[ $pid1 -ne $pid2 ]] && exitError "Argh!? Daemon not found" # Should never happens
 
