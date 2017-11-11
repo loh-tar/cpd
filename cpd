@@ -27,11 +27,15 @@ declare -r tmpDir="/tmp/$me/user-$(id -un)"
 declare -r jobFile="$tmpDir/jobs"               # All jobs as key/value
 declare -r jobList="$tmpDir/joblst"             # Subset of jobFile as handy table
 declare -A jobData=()                           # Will filled with data of jobFile
+declare -A jobPids=()                           # PIDs of our jobs by our own ID
+declare    recheckJobList="0"                   # Set to 1 when some job has finished
+declare    screenWidth="100"                    # Will adjusted by setScreenWidth()
 
 # Colored text...
 # FIXME: Add test if terminal is capable of colored output or if output goes to file/pipe
 declare    txtBold=$'\e[1m'                     # Or bright, depend on your terminal
 declare    txtClean=$'\e[0m'                    # All attributes off
+declare    clearLine=$'\e[2K'                   # Äh, yes
 
 #
 # Helper Functions
@@ -69,6 +73,13 @@ checkJobId() {
 
   [[ $(cut -d' ' -f1 "$jobFile" | grep -c "$1") -eq 0 ]] &&
     exitError "Job not found: $1"
+}
+
+checkStatus() {
+  # Need parms: id status change
+  local status=$(getJobValue "$1" "STATUS")
+  local change=${3-"change"}
+  [[ "$status" == "$2" ]] || exitError "Job $1 is '$status', you can only $change '$2' jobs"
 }
 
 unLock(){
@@ -132,6 +143,7 @@ updateJobList() {
   read max < "$tmpDir/next-id"
   for (( id=1; id < max; id++ ))
   do
+#   echo "$id" "${jobData["$id:STATUS"]}" "${jobData["$id:DRIVE"]}"
     printf "%s %s %s %s %s\n"                                 \
       "$id" "${jobData["$id:PRIO"]}" "${jobData["$id:DATE"]}" \
       "${jobData["$id:STATUS"]}" "${jobData["$id:DRIVE"]}"    \
@@ -156,16 +168,20 @@ getJobValue() {
 changeStatus() {
   # Need parms: id newStatus
   modifyJob $1 "STATUS" $2
-  [[ "STOPPING RESUME CANCEL" =~ $2 ]] && modifyJob $1 "PRIO" "0"
-  [[ "running" =~ $2 ]]                && modifyJob $1 "PRIO" "1"
-  [[ "stopped" =~ $2 ]]                && modifyJob $1 "PRIO" "2"
-  [[ "done canceled" =~ $2 ]]          && modifyJob $1 "PRIO" "9"
+
+  if [[ "STOPPING CANCEL" =~ $2 ]] ; then
+    modifyJob $1 "PRIO" "0"
+  elif [[ "running starting" =~ $2 ]] ; then
+    modifyJob $1 "PRIO" "1"
+  elif [[ "RESUME STOPPED" =~ $2 ]] ; then
+    modifyJob $1 "PRIO" "2"
+  elif [[ "done canceled killed ERROR NOSTART" =~ $2 ]] ; then
+    modifyJob $1 "PRIO" "9"
+  fi
 }
 
 readJobs() {
   local key val
-
-  jobData=()
 
   while read line
   do
@@ -175,17 +191,22 @@ readJobs() {
   done < "$jobFile"
 }
 
+setScreenWidth() {
+  # Is that the right way to adjust to terminal width?
+  screenWidth=$(stty size|cut -d' ' -f2)
+  # Well there is bash build in checkwinsize/COLUMNS but that sound expensive
+  #  > bash checks the window size after each command
+}
+
 cutLeft() {
   # Need parms: width string
 
   # Some effort to cut string from the left side to fit into table
   # I did't get it with some printf format :-/
-  local length=${#2}
-  local str=$2
+  local -n str=$2       # -n =by reference
+  local length=${#str}
 
-  (( length > $1 )) && str="~${2:((length - $1 + 1)):$length}"
-
-  echo "$str"
+  (( length > $1 )) && str="~${str:((length - $1 + 1)):$length}"
 }
 
 #
@@ -194,15 +215,16 @@ cutLeft() {
 outJobLine() {
   local id="$1"
   local format="$2"
-  local cols="$3"
-  local target=$(cutLeft "20" "${jobData["$id:TARGET"]}")
+
+  local target="${jobData["$1:TARGET"]}"
+  cutLeft "20" target
 
   printf -v txt "$format"                                     \
     "$id" "${jobData["$id:PRIO"]}" "${jobData["$id:STATUS"]}" \
     "${jobData["$id:DONE"]}" "${jobData["$id:DRIVE"]}"        \
     "$target" "${jobData["$id:ARGUMENTS"]}"
 
-  out "${txt:0:$cols}"
+  out "${txt:0:$screenWidth}"
 }
 
 cmdList() {
@@ -211,16 +233,17 @@ cmdList() {
   local type="$1"
   [[ -f "$jobFile" ]] || type="NoJobs"
 
+  setScreenWidth
+
   case "$type" in
     NoJobs)
       out "No jobs to list"
       ;;
+
     *)
       local txt=" ID PRIO STATUS   DONE  DRIVE            TARGET                ARGUMENTS"
       local format="%3s   %s  %-8s  %3s  %-15s  %-20s  %s"
-      # Is that the right way to adjust to terminal width?
-      local cols=$(stty size|cut -d' ' -f2)
-      out "${txt:0:$cols}"
+      out "${txt:0:$screenWidth}"
       readJobs
       ;;&
 
@@ -228,7 +251,7 @@ cmdList() {
       read max < "$tmpDir/next-id"
       for (( id=1; id < max; id++ ))
       do
-        outJobLine "$id" "$format" "$cols"
+        outJobLine "$id" "$format"
       done
       ;;
 
@@ -239,59 +262,101 @@ cmdList() {
 
       while read id prio date status drive
       do
-        outJobLine "$id" "$format" "$cols"
+        outJobLine "$id" "$format"
       done < "$jobList"
       ;;
 
   esac
 }
 
-cmdCancel() {
-  checkJobId "$1"
-  local id="$1"
+notifyDaemon() {
+  # Instead of notify the daemon, it would be possible to cancel/resume/stop
+  # the job directly. I don't know whats best, you?
 
-  out "Cancel job $id: $(getJobValue $id "ARGUMENTS")"
+  # Check if daemon is running
+  if [[ -f "$tmpDir/daemon-pid" ]] ; then
+    local pid1=$(< "$tmpDir/daemon-pid")
+    local pid2=($(ps -C $me -o pid=))
+    [[ "$pid2[*]" =~ "$pid1" ]] || exitError "FATAL: Daemon not found" # Should never happens
+
+    kill -USR1 "$pid1"
+  else
+    info "Hint: No running daemon\n"
+  fi
+}
+
+cmdCancel() {
+  # Need parms: id
+  checkJobId "$1"
+
+  if [[ $(getJobValue "$1" "PRIO") == "9" ]] ; then
+    exitError "Job $1 status is: $(getJobValue "$1" "STATUS")"
+  fi
+
+  out "Cancel job $1: $(getJobValue $1 "ARGUMENTS")"
   setLock || exitError "Job not canceled"
-  changeStatus "$id" "CANCEL"
+  changeStatus "$1" "CANCEL"
   unLock
+
+  notifyDaemon
 }
 
 cmdResume() {
+  # Need parms: id
   checkJobId "$1"
-  local id="$1"
+  checkStatus "$1" "STOPPED" "resume"
 
-  out "Resume job $id"
+  out "Resume job $1"
   setLock || exitError "Job not resumed"
-  changeStatus "$id" "RESUME"
+  changeStatus "$1" "RESUME"
   unLock
+
+  notifyDaemon
 }
 
 cmdStop() {
+  # Need parms: id
   checkJobId "$1"
-  local id="$1"
+  checkStatus "$1" "running" "stop"
 
-  out "Stop job $id"
+  out "Stop job $1"
   setLock || exitError "Job not stopped"
-  changeStatus "$id" "STOPPING"
+  changeStatus "$1" "STOPPING"
   unLock
+
+  notifyDaemon
 }
 
 cmdChangePrio() {
+  # Need parms: id prio
   [[ "$#" -ne 2 ]] && exitError "Need two arguments"
   checkJobId "$1"
   [[ "$2" =~ ^[0-9]+$ ]] || exitError "Not a positive integer: $2"
   (( "$2" > 8 || "$2" < 3 )) && exitError "Priority must be 3-8 not: $2"
 
-  local id="$1"
-  local prio="$2"
+  checkStatus "$1" "pending"
 
-  local status=$(getJobValue "$1" "STATUS")
-  [[ "$status" == "pending" ]] || exitError "Job is '$status', you can only change 'pending' jobs"
-
-  out "Change priority of job $id to $prio"
+  out "Change priority of job $1 to $2"
   setLock || exitError "Job not changed"
-  modifyJob $id "PRIO" $prio
+  modifyJob $1 "PRIO" $2
   unLock
+}
+
+cmdProcess() {
+  set -o monitor
+  trap "recheckJobList=1" USR1 2>/dev/null
+  trap checkChilds CHLD
+
+  echo "$$" > "$tmpDir/daemon-pid"
+  recheckJobList="1"
+
+  while (( recheckJobList ))
+  do
+    processJobList
+  done
+
+  rm "$tmpDir/daemon-pid"
+  info "All done\n"
 }
 
 #
@@ -299,100 +364,216 @@ cmdChangePrio() {
 #
 
 startJob() {
-  changeStatus "$1" "running"
-  info "OK\n"
+  # Need parms: id
+  procInfo "$1" "Start"
+  arg=${jobData["$1:ARGUMENTS"]}
+
+  # Our true command would be..
+  local cmd="cp -t ${jobData["$1:TARGET"]} ${jobData["$1:ARGUMENTS"]}"
+
+  # ..but for now we use fake jobs
+  local cmd2 st=$((($RANDOM % 9) * 2)) # SleepTime
+  case $st in
+    0)  cmd2="echo 'StartERR $1'; SomeWrongComand;" ; ;;
+    2)  cmd2="echo 'ERRORJob $1'; slpeep $st; echo 'What ever was wrong' >&2; exit 1;" ; ;;
+    *)  cmd2="echo 'SLEEPJob $1 - ${st}s'; sleep $st;" ; ;;
+  esac
+
+  changeStatus "$1" "starting"
+
+  # Our true command would be..
+  # (eval "$cmd" > $tmpDir/msg.log-job-$1 2>$tmpDir/error.log-job-$1)&
+  # printf "%(%FT%T)T [Job $1] %s\n" "-1" "$cmd" >> "$tmpDir/job.log"
+
+  # ..but for now we use fake jobs
+  (eval "$cmd2" > $tmpDir/msg.log-job-$1 2>$tmpDir/error.log-job-$1)&
+  printf "%(%FT%T)T [Job $1]\nFake Job: %s\nTrue Job: %s\n\n" "-1" "$cmd2" "$cmd" >> "$tmpDir/job.log"
+
+  jobPids[$1]="$!"
+  modifyJob "$1" "PID" "$!" # FIXME: After a quick error would that be a wrong info
+}
+
+check4Pid() {
+  # Need parms: id action
+  if ! (( ${jobPids[$1]} )) ; then
+    # Should never be printed
+    error "FATAL: Job $1 is not in my pid list. Can't $2 job"
+    return 1
+  fi
+
+  return 0
 }
 
 stopJob() {
-  changeStatus "$1" "stopped"
-  info ", OK\n"
+  # Need parms: id
+  procInfo "$1" "Stop"
+  check4Pid $1 "stop" || return
+  changeStatus "$1" "STOPPED"
+  kill -STOP "${jobPids[$1]}"
 }
 
 resumeJob() {
+  # Need parms: id
+  procInfo "$1" "Resume"
+  check4Pid $1 "resume" || return
   changeStatus "$1" "running"
-  info ", OK\n"
+  kill -CONT "${jobPids[$1]}"
 }
 
 cancelJob() {
-  changeStatus "$1" "canceled"
-  info ", OK\n"
+  # Need parms: id
+  if (( ${jobPids[$1]} )) ; then
+    # >>>>>> Don't bother with kill-notice, Thanks to pix
+    # https://stackoverflow.com/a/23645819
+    # Anyway is it ugly because we don't get this way the 137 exit code in
+    # checkChilds. And to avoid to get twice a procInfo we remove the pid first
+    local pid=${jobPids[$1]}
+    unset jobData["$1:PID"]
+    unset jobPids[$1]
+    disown "$pid" 2>/dev/null
+    kill -KILL "$pid"
+    changeStatus "$1" "killed"
+    procInfo "$1" "Killed"
+    modifyJob "$1" "PID" " "
+    # <<<<<< end ugly
+    # >>>>>> That's all what here should be done
+    # kill -KILL "${jobPids[$1]}"
+    # modifyJob "$1" "PID" " "
+    # <<<<<< end good!
+  else
+    procInfo "$1" "Cancel"
+    changeStatus "$1" "canceled"
+  fi
 }
 
 procInfo() {
-  # Need parms: id status resource
-  info "Job %3s is %-17s %-15s" "$1" "$2" "$3"
+  # Need parms: id change
+  local format="%-8s[%3s] [%-15s] %20s <- %s"
+
+  local target="${jobData["$1:TARGET"]}"
+  cutLeft "20" target
+
+  printf -v txt "$format" "$2" "$1" "${jobData["$1:DRIVE"]}" \
+                "$target" "${jobData["$1:ARGUMENTS"]}"
+
+  info "%s\n" "$clearLine${txt:0:$screenWidth}"
+}
+
+checkChilds() {
+  # Thanks to michaelt
+  # https://stackoverflow.com/a/21750255
+  for id in ${!jobPids[*]}; do
+    local pid=${jobPids[$id]}
+    if kill -0 $pid 2>/dev/null ; then
+      # Set job to running if not already done
+      [[ ${jobData["$id:PID"]} ]] && continue
+      changeStatus "$id" "running"
+      jobData["$id:PID"]="$pid"
+    else
+      recheckJobList="1"
+      wait $pid 2>/dev/null
+      local x=$?
+#       echo ">>Finished>$id<$pid:x=$x<<"
+      if (( x == 0 )) ; then
+        changeStatus "$id" "done"
+        procInfo "$id" "Done"
+      else
+        if (( x == 127 )) ; then
+          # Start up error, should never happens
+          changeStatus "$id" "NOSTART"
+          procInfo "$id" "StartERR"
+        elif (( x == 137 )) ; then
+          changeStatus "$id" "killed"
+          procInfo "$id" "Killed"
+        else
+          # Error while running
+          changeStatus "$id" "ERROR"
+          procInfo "$id" "ERROR"
+        fi
+      fi
+
+      unset jobData["$id:PID"]
+      unset jobPids[$id]
+    fi
+  done
 }
 
 processJobList() {
   if ! setLock ; then  error "List not processed"; return 1; fi
+
   updateJobList
-  busyDrives=()
+  setScreenWidth
+
+  local busyDrives=()
+  local stoppedJobs=()
+  local waitingJobs=()
+  recheckJobList="0"
 
   while read id prio date status drive
   do
     case $prio in
-      0)
-        case $status in
-          STOPPING)
-            procInfo "$id" "said to stop..."
-            stopJob "$id"
-          ;;
-
-          RESUME)
-            procInfo "$id" "said to resume..."
-            if [[ ${busyDrives[@]} =~ $drive ]] ; then
-              info ", Must wait\n"
-            else
-              resumeJob "$id"
-              busyDrives+=($drive)
-            fi
-          ;;
-
-          CANCEL)
-            procInfo "$id" "said to cancel..."
-            cancelJob "$id"
-          ;;
-
-          *)
-            error "Error not handled: ID:$id PRIO:$prio STATUS:$status"
-          ;;
-
-        esac
+      0)  case $status in
+            STOPPING) stopJob "$id"; stoppedJobs+=($id); ;;
+            CANCEL)   cancelJob "$id"; ;;
+            *)        error "FATAL: Ignored: ID:$id PRIO:$prio STATUS:$status"; ;;
+          esac
       ;;
 
-      1)
-        info "Job %3s is running using     %s\n" "$id" "$drive"
-        busyDrives+=($drive)
+      1)  busyDrives+=($drive)
       ;;
 
-      2)
-        info "Job %3s is stopped would use %s\n" "$id" "$drive"
+      2)  case $status in
+            RESUME)   if [[ ${busyDrives[@]} =~ $drive ]] ; then
+                        waitingJobs+=($id)
+                      else
+                        busyDrives+=($drive); resumeJob "$id"
+                      fi; ;;
+            STOPPED)  stoppedJobs+=($id); ;;
+            *)        error "FATAL: Ignored: ID:$id PRIO:$prio STATUS:$status"; ;;
+          esac
       ;;
 
       [3-8])
-        procInfo "$id" "waiting for" "$drive"
-        if [[ ${busyDrives[@]} =~ $drive ]] ; then
-          info ", Must wait\n"
-        else
-          info ", Start job..."
-          startJob "$id"
-          busyDrives+=($drive)
-        fi
+          if [[ ${busyDrives[@]} =~ $drive ]] ; then
+            waitingJobs+=($id)
+          else
+            busyDrives+=($drive); startJob "$id"
+          fi
       ;;
 
-      9)
-        # No more todo, only done and canceled jobs left
-        break
-        ;;
-      *)
-        # Should never happens
-        error "Ignored job ID:$id PRIO:$prio STATUS:$status\n"
+      9)  # No more todo, only done and canceled jobs left
+          break
       ;;
+
+      *)  # Should never happens
+          error "FATAL: Ignored: ID:$id PRIO:$prio STATUS:$status"
+      ;;
+
     esac
+
+    (( recheckJobList )) && break
+
   done < "$jobList"
 
   unLock
-  info "Busy Drives: ${busyDrives[*]}\n"
+
+  printf -v running "[Running: %s]" "${!jobPids[*]}"
+  printf -v busydrv "[Busy Drives: %s]" "${busyDrives[*]}"
+  printf -v stopped "[Stopped: %s]" "${stoppedJobs[*]}"
+  printf -v waiting "[Waiting: %s]" "${waitingJobs[*]}"
+  printf -v txt "  %s %s %s %s" "$running" "$stopped" "$waiting" "$busydrv"
+
+  info "%s\r" "${txt:0:$screenWidth}"
+
+  # Let's do some fancy stuff
+  local x=("-" "\\" "|" "/")  i="0"
+  while (( ${#jobPids[*]} && ! recheckJobList ))
+  do
+    info "%s\r" "${x[((i++ % 4))]}"
+    sleep 0.3
+  done
+
+  info "$clearLine"
 }
 
 addNewJob() {
@@ -431,6 +612,8 @@ addNewJob() {
   addToJobFile "$newId" "ARGUMENTS" "${*@Q}"
 
   unLock
+
+  notifyDaemon
 }
 
 #
@@ -460,9 +643,10 @@ do
         out "  $me <command> [<argument>...]"
         out ""
         out "${txtBold}Commands are:${txtClean}"
-        out "  -C <job-id>        Cancel a job"
+        out "  -C <job-id>        Cancel a pending or kill a running job"
         out "  -h [c]             Show this help or when c=l License, c=s Source of $me"
         out "  -l [c]             List jobs, c=i by ID"
+        out "  -P                 Process jobs"
         out "  -p <job-id> <prio> Change job priority 3-8"
         out "  -r <job-id>        Resume a job"
         out "  -s <job-id>        Stop a job"
@@ -488,12 +672,10 @@ OPTIND="1"
 while getopts ?C:lp:Pr:s: opt
 do
   case $opt in
-    # Hidden/Intern commands, not intended for daily use
-    P)  processJobList            ; exit ; ;;
-    # Documented commands
     C)  cmdCancel $OPTARG         ; exit ; ;;
     l)  shift $(( $OPTIND - 1 ))
         cmdList $1                ; exit ; ;;
+    P)  cmdProcess                ; exit ; ;;
     p)  shift $(( $OPTIND - 1 ))
         cmdChangePrio $OPTARG $@  ; exit ; ;;
     r)  cmdResume $OPTARG         ; exit ; ;;
@@ -504,15 +686,5 @@ do
 done
 
 # At this point we have a new job to enqueue
-[[ -d "$1" ]] || exitError "Destination must be directory"
+[[ -d "$1" ]] || exitError "Destination must be a directory"
 addNewJob "$@"
-
-# Check if daemon is running
-if [[ -f "$tmpDir/daemon-pid" ]] ; then
-  pid1=$(< "$tmpDir/daemon-pid")
-  pid2=$(ps -C $me -o pid=)
-  [[ $pid1 -ne $pid2 ]] && exitError "Argh!? Daemon not found" # Should never happens
-
-else
-  echo "FIXME: Start daemon!"
-fi
