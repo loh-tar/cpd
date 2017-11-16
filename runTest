@@ -1,0 +1,32 @@
+#!/bin/bash
+
+type=${1:-"small"}
+cpdDir="/tmp/cpd/user-$(id -un)"
+
+if [[ -f $cpdDir/daemon-pid ]] ; then
+  echo "There is a running daemon"
+  echo "Will not destroy tmp dir"
+  cp ./testData/$type/{jobs,next-id} $cpdDir/
+else
+  echo "Start with clean tmp dir"
+  rm -rf $cpdDir/
+  mkdir -p $cpdDir/
+  cp ./testData/$type/{jobs,next-id,not-locked} $cpdDir/
+fi
+
+
+( sleep 2
+  ./cpd -C 5 >/dev/null 2>&1
+  ./cpd -C 6 >/dev/null 2>&1
+  ./cpd -s 4 >/dev/null 2>&1
+  sleep 2
+ ./cpd -r 4 >/dev/null 2>&1
+)& >/dev/null 2>&1
+
+echo
+echo "Run: cpd -l"
+./cpd -l
+
+echo
+echo "Run: cpd -P"
+./cpd -P
