@@ -361,6 +361,16 @@ cmdChangePrio() {
   unLock
 }
 
+cmdTidy() {
+  getDaemonPid && exitError "You like it tidy? Get rid of the beast first!"
+  [[ -d $tmpDir ]] || exitGood "Nothing to tidy up"
+
+  setLock || exitError "Oops!? I will better do nothing"
+
+  rm -rf $tmpDir
+  exitGood "Everything removed"
+}
+
 cmdProcess() {
   notifyDaemon && exitGood "Daemon already running with pid $daemonPID is triggered to do the job"
 
@@ -829,6 +839,8 @@ do
         out "  -p <job-id> <prio> Change job priority 3-8"
         out "  -r <job-id>        Resume a job"
         out "  -s <job-id>        Stop a job"
+        out "  -T                 Tidy up all job data"
+#         out "  -t                 Tidy up done jobs (TODO)"
         if [[ $opt == "H" ]] ; then
         out ""
         out "${txtBold}Notes:${txtClean}"
@@ -838,6 +850,7 @@ do
         out "  • The executed copy command will be 'cp -t <dest-dir> <source>' no extras, sorry"
         out "  • -D stops job processing, if so, or stops the daemon at all, if not"
         out "     Adding a new job trigger the daemon to continue job processing, there is no blocking"
+        out "  • -T does nothing else than 'rm -rf $tmpDir'"
         out ""
         out "${txtBold}Examples:${txtClean}"
         out "  Enqueue new copy task"
@@ -852,7 +865,7 @@ do
 done
 
 OPTIND="1"
-while getopts ?C:Dlp:Pr:s: opt
+while getopts ?C:Dlp:Pr:s:T opt
 do
   case $opt in
     C)  cmdCancel $OPTARG         ; exit ; ;;
@@ -864,6 +877,7 @@ do
         cmdChangePrio $OPTARG $@  ; exit ; ;;
     r)  cmdResume $OPTARG         ; exit ; ;;
     s)  cmdStop $OPTARG           ; exit ; ;;
+    T)  cmdTidy                   ; exit ; ;;
 
     \?) exitError "Need help? Use: $me -h"  ; ;;
   esac
