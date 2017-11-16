@@ -29,13 +29,16 @@ declare -r jobList="$tmpDir/joblst"             # Subset of jobFile as handy tab
 declare -A jobData=()                           # Will filled with data of jobFile
 declare -A jobPids=()                           # PIDs of our jobs by our own ID
 declare    recheckJobList="0"                   # Set to 1 when some job has finished
+declare    stopRunning="0"                      # Set to 1 by command '-D -'
 declare    screenWidth="100"                    # Will adjusted by setScreenWidth()
+declare    daemonPID="0"                        # Used to notify/check our Daemon
 
-# Colored text...
+# Colored text and other escape sequences
 # FIXME: Add test if terminal is capable of colored output or if output goes to file/pipe
 declare    txtBold=$'\e[1m'                     # Or bright, depend on your terminal
 declare    txtClean=$'\e[0m'                    # All attributes off
 declare    clearLine=$'\e[2K'                   # Äh, yes
+declare    oneLineUp=$'\e[1A'                   # Need more lines? 3A=three lines up
 
 #
 # Helper Functions
@@ -52,6 +55,11 @@ info() {
   local format="$1"
   shift
   printf "$format" "$@" >&2
+}
+
+exitGood() {
+  info "$1\n"
+  exit 0
 }
 
 exitError() {
@@ -269,19 +277,29 @@ cmdList() {
   esac
 }
 
+getDaemonPid() {
+  # Check if daemon is running
+  if [[ -f "$tmpDir/daemon-pid" ]] ; then
+    daemonPID=$(< "$tmpDir/daemon-pid")
+    local pid2=($(ps -C $me -o pid=))
+    [[ "$pid2[*]" =~ "$daemonPID" ]] || exitError "FATAL: Daemon not found" # Should never happens
+    return 0
+  else
+    daemonPID="0"
+    return 1
+  fi
+}
+
 notifyDaemon() {
   # Instead of notify the daemon, it would be possible to cancel/resume/stop
   # the job directly. I don't know whats best, you?
 
-  # Check if daemon is running
-  if [[ -f "$tmpDir/daemon-pid" ]] ; then
-    local pid1=$(< "$tmpDir/daemon-pid")
-    local pid2=($(ps -C $me -o pid=))
-    [[ "$pid2[*]" =~ "$pid1" ]] || exitError "FATAL: Daemon not found" # Should never happens
-
-    kill -USR1 "$pid1"
+  if getDaemonPid ; then
+    kill -USR1 "$daemonPID"
+    return 0
   else
-    info "Hint: No running daemon\n"
+    # info "Hint: No running daemon\n"
+    return 1
   fi
 }
 
@@ -343,8 +361,11 @@ cmdChangePrio() {
 }
 
 cmdProcess() {
+  notifyDaemon && exitGood "Daemon already running with pid $daemonPID is triggered to do the job"
+
   set -o monitor
   trap "recheckJobList=1" USR1 2>/dev/null
+  trap "stopRunning=1; info '${clearLine}Received signal to stop, will wait for running jobs\n'" USR2 2>/dev/null
   trap checkChilds CHLD
 
   echo "$$" > "$tmpDir/daemon-pid"
@@ -352,11 +373,151 @@ cmdProcess() {
 
   while (( recheckJobList ))
   do
+    (( ! ${#jobPids[*]} && stopRunning )) && break
     processJobList
   done
 
   rm "$tmpDir/daemon-pid"
-  info "All done\n"
+
+  if (( stopRunning )) ; then
+    info "Processing aborted by signal\n"
+    stopRunning="0"
+  else
+    info "All done\n"
+  fi
+}
+
+cmdDaemonize() {
+  case $1 in
+    -D-) shift; set -- "stop"   ; ;;
+    -D+) shift; set -- "start"  ; ;;
+      *) shift; ;;
+  esac
+
+  (( $# )) ||  set -- "status"
+
+  case $1 in
+    start|+)
+      # Thanks to Mike S
+      # https://stackoverflow.com/a/29107686
+      local meFullPath=$(which ${BASH_SOURCE[0]})
+
+      case $2 in
+        DAEMON) # 3. doomed
+          exec >$tmpDir/outfile-daemon
+          exec 2>$tmpDir/errfile-daemon
+          exec 0</dev/null
+
+          printf "%(%FT%T)T cpd daemon started with pid $$\n" "-1"
+
+          # FIXME: This part is almost a copy of cmdProcess,
+          # split it into parts/functions to reduce redundancy
+          set -o monitor
+          trap "recheckJobList=1" USR1 2>/dev/null
+          trap "stopRunning=1; info '${clearLine}Received signal to stop, will wait for running jobs\n'" USR2 2>/dev/null
+          trap checkChilds CHLD
+          echo "$$" > "$tmpDir/daemon-pid"
+          recheckJobList="1"
+
+          # FIXME: Improve sleep state and communication with daemon.
+          # Read from socket or something instead only to trigger/trap and
+          # running pointless every a view seconds only to catch the trap.
+          # Or perhaps by kill -STOP yourself someway
+          local i="0"
+          while (( ! stopRunning && i < 60 )) # Finish after ~10min, see sleep 10
+          do
+
+            while (( recheckJobList ))
+            do
+              (( ! ${#jobPids[*]} && stopRunning )) && break
+              printf "%(%FT%T)T Go to work\n" "-1"
+              processJobList
+              i="0"
+            done
+
+            stopRunning="0"
+            recheckJobList="0"
+            printf "%(%FT%T)T Sleep\n" "-1"
+            sleep 10 # Don't sleep to long, but long enough not to bother
+            printf "%(%FT%T)T Wakeup\n" "-1"
+            (( i++ ))
+          done
+
+          printf "%(%FT%T)T Exit with pid $$\n" "-1"
+          rm "$tmpDir/daemon-pid"
+          exit 0
+        ;;
+
+        BANISHMENT) # 2. child
+          # umask 0 # Mike does this, but for now we don't want a daemon running
+                    # as an other user than the caller (?)
+          $meFullPath -D start DAEMON  >/dev/null 2>/dev/null </dev/null &
+          # FIXME: Print to tty like Mike, No \n, for now
+          info "cpd daemon started with pid $!"
+          exit 0
+        ;;
+
+        *) # 1. entry point
+          getDaemonPid && { info "Daemon is already running with pid $daemonPID\n"; exit 0; }
+          setsid $meFullPath -D start BANISHMENT  &
+        ;;
+      esac
+      exit 0
+    ;;
+
+    *) # FIXME: This cause error "stty: 'standard input': Inappropriate ioctl for device"
+       #        when going to daemon mode. That's why we do it now
+      setScreenWidth
+    ;;&
+
+    stop|-)
+      getDaemonPid || exitGood "No running daemon to stop"
+      kill -USR2 "$daemonPID"
+
+      # Let's do some fancy stuff
+      local  x=("-" "\\" "|" "/")  i="0"
+      while [[ -f "$tmpDir/daemon-pid" ]] && (( i < 30 ))
+      do
+        # local txt=<("$tmpDir/processStatus")      # Not working, something locked
+        # local txt=$(cat "$tmpDir/processStatus")  # Works
+        # FIXME: Print three lines info text and hourglass (fix at processJobList too)
+        #        and wait until key pressed
+        # info "\r%s Wait for daemon with pid $daemonPID to stop %s" "${x[((i++ % 4))]}" "$txt"
+        # info "$oneLineUp\r$clearLine%s  %s\nWait for daemon with pid $daemonPID to stop %s" "${x[((i++ % 4))]}" "$txt"
+        info "\r%s Wait for daemon with pid $daemonPID to stop " "${x[((i++ % 4))]}"
+        sleep 0.3;
+      done
+
+      if [[ -f "$tmpDir/daemon-pid" ]] ; then
+        info " - is still running\n"
+        cat "$tmpDir/processStatus" | cut -c-$screenWidth
+        exit 1
+      else
+        info " - OK\n"
+        exit 0
+      fi
+    ;;
+
+    status)
+      if getDaemonPid ; then
+        out "Daemon is running with pid $daemonPID"
+        out "Process status:"
+        cat "$tmpDir/processStatus" | cut -c-$screenWidth
+      else
+        out "No running daemon"
+        [[ -f "$jobFile" ]] && out "Job list:"
+        # FIXME: Instead of call cmdList calc a process status
+        cmdList
+      fi
+
+      exit 0
+    ;;
+
+    *)
+      exitError "What is '$1'? Try '$me -h' for help"
+    ;;
+
+  esac
 }
 
 #
@@ -431,7 +592,7 @@ cancelJob() {
     unset jobData["$1:PID"]
     unset jobPids[$1]
     disown "$pid" 2>/dev/null
-    kill -KILL "$pid"
+    kill -KILL "$pid" 2>/dev/null
     changeStatus "$1" "killed"
     procInfo "$1" "Killed"
     modifyJob "$1" "PID" " "
@@ -537,7 +698,7 @@ processJobList() {
           if [[ ${busyDrives[@]} =~ $drive ]] ; then
             waitingJobs+=($id)
           else
-            busyDrives+=($drive); startJob "$id"
+            (( ! stopRunning )) && { busyDrives+=($drive); startJob "$id"; }
           fi
       ;;
 
@@ -561,9 +722,10 @@ processJobList() {
   printf -v busydrv "[Busy Drives: %s]" "${busyDrives[*]}"
   printf -v stopped "[Stopped: %s]" "${stoppedJobs[*]}"
   printf -v waiting "[Waiting: %s]" "${waitingJobs[*]}"
-  printf -v txt "  %s %s %s %s" "$running" "$stopped" "$waiting" "$busydrv"
+  printf -v txt "%s %s %s %s" "$running" "$stopped" "$waiting" "$busydrv"
 
-  info "%s\r" "${txt:0:$screenWidth}"
+  info "%s  \r" "${txt:0:(($screenWidth - 2))}"
+  printf "%s\n" "$txt" > "$tmpDir/processStatus"
 
   # Let's do some fancy stuff
   local x=("-" "\\" "|" "/")  i="0"
@@ -644,9 +806,11 @@ do
         out ""
         out "${txtBold}Commands are:${txtClean}"
         out "  -C <job-id>        Cancel a pending or kill a running job"
+        out "  -D [<action>]      Print status and start/stop the daemon or job processing"
+        out "                     <action> can be +|-|start|stop"
         out "  -h [c]             Show this help or when c=l License, c=s Source of $me"
         out "  -l [c]             List jobs, c=i by ID"
-        out "  -P                 Process jobs"
+        out "  -P                 Process jobs or trigger daemon to continue"
         out "  -p <job-id> <prio> Change job priority 3-8"
         out "  -r <job-id>        Resume a job"
         out "  -s <job-id>        Stop a job"
@@ -656,23 +820,26 @@ do
         out "  • The second form list or change tasks"
         out "  • The job priority is not static and affect only the start time. Highest priority is 0"
         out "  • The executed copy command will be 'cp -t <dest-dir> <source>' no extras, sorry"
+        out "  • -D stops job processing, if so, or stops the daemon at all, if not"
+        out "     Adding a new job trigger the daemon to continue job processing, there is no blocking"
         out ""
         out "${txtBold}Examples:${txtClean}"
         out "  Enqueue new copy task"
         out "    $me /media/1a/foo /media/1b/foo"
         out ""
         out "  Show status"
-        out "    $me -l"
+        out "    $me -D"
         out ""
         exit ; ;;
   esac
 done
 
 OPTIND="1"
-while getopts ?C:lp:Pr:s: opt
+while getopts ?C:Dlp:Pr:s: opt
 do
   case $opt in
     C)  cmdCancel $OPTARG         ; exit ; ;;
+    D)  cmdDaemonize $@           ; exit ; ;;
     l)  shift $(( $OPTIND - 1 ))
         cmdList $1                ; exit ; ;;
     P)  cmdProcess                ; exit ; ;;
