@@ -22,6 +22,7 @@
 declare -r me=$(basename "$0")
 declare -r version="0.1pre0"
 declare -r vDate="Nov 2017"
+declare -r simulationMode="1"
 
 declare -r tmpDir="/tmp/$me/user-$(id -un)"
 declare -r jobFile="$tmpDir/jobs"               # All jobs as key/value
@@ -529,26 +530,26 @@ startJob() {
   procInfo "$1" "Start"
   arg=${jobData["$1:ARGUMENTS"]}
 
-  # Our true command would be..
-  local cmd="cp -t ${jobData["$1:TARGET"]} ${jobData["$1:ARGUMENTS"]}"
-
-  # ..but for now we use fake jobs
+if (( simulationMode )) ; then
   local cmd2 st=$((($RANDOM % 9) * 2)) # SleepTime
   case $st in
     0)  cmd2="echo 'StartERR $1'; SomeWrongComand;" ; ;;
     2)  cmd2="echo 'ERRORJob $1'; slpeep $st; echo 'What ever was wrong' >&2; exit 1;" ; ;;
     *)  cmd2="echo 'SLEEPJob $1 - ${st}s'; sleep $st;" ; ;;
   esac
+fi
+
+  local cmd="cp -t ${jobData["$1:TARGET"]} ${jobData["$1:ARGUMENTS"]}"
 
   changeStatus "$1" "starting"
 
-  # Our true command would be..
-  # (eval "$cmd" > $tmpDir/msg.log-job-$1 2>$tmpDir/error.log-job-$1)&
-  # printf "%(%FT%T)T [Job $1] %s\n" "-1" "$cmd" >> "$tmpDir/job.log"
-
-  # ..but for now we use fake jobs
+if (( simulationMode )) ; then
   (eval "$cmd2" > $tmpDir/msg.log-job-$1 2>$tmpDir/error.log-job-$1)&
   printf "%(%FT%T)T [Job $1]\nFake Job: %s\nTrue Job: %s\n\n" "-1" "$cmd2" "$cmd" >> "$tmpDir/job.log"
+else
+  (eval "$cmd" > $tmpDir/msg.log-job-$1 2>$tmpDir/error.log-job-$1)&
+  printf "%(%FT%T)T [Job $1] %s\n" "-1" "$cmd" >> "$tmpDir/job.log"
+fi
 
   jobPids[$1]="$!"
   modifyJob "$1" "PID" "$!" # FIXME: After a quick error would that be a wrong info
