@@ -785,10 +785,16 @@ addNewJob() {
 # Hint the user how to use me when called without argument
 [ "$#" -eq "0"  ] && set -- "-h"
 
-while getopts :h: opt # Keep help recognition away from other options
+while getopts :Hh opt # Keep help recognition away from other options
 do
-  [ "$opt" != "h" -a "$OPTARG" != "h" ] && continue
-  case $OPTARG in
+  case $opt in
+    h)  if   [[ "-hl" == $1 || "l" == $2 ]] ; then opt="l"
+        elif [[ "-hs" == $1 || "s" == $2 ]] ; then opt="s"; fi; ;;
+    H) : ; ;;
+    *)  continue; ;;
+  esac
+
+  case $opt in
     l)  out ""
         # Adjust -B4 in case of copyright changes
         grep -B4 -A13 -m1 "This program is free software" "$0" | cut -b2-
@@ -798,8 +804,10 @@ do
     s)  less "$0"
         exit ; ;;
 
-    *)  out "This is ${txtBold}cpd${txtClean} - The copy daemon (v$version, $vDate)"
+    *)  if [[ $opt == "H" ]] ; then
+        out "This is ${txtBold}cpd${txtClean} - The copy daemon (v$version, $vDate)"
         out ""
+        fi
         out "${txtBold}Usage:${txtClean}"
         out "  $me <dest-dir> <source>..."
         out "  $me <command> [<argument>...]"
@@ -808,12 +816,19 @@ do
         out "  -C <job-id>        Cancel a pending or kill a running job"
         out "  -D [<action>]      Print status and start/stop the daemon or job processing"
         out "                     <action> can be +|-|start|stop"
-        out "  -h [c]             Show this help or when c=l License, c=s Source of $me"
+        if [[ $opt == "h" ]] ; then
+        out "  -h [c]             Show this help or when c=l License, c=s Source of ${txtBold}$me${txtClean}"
+        out "  -H                 Show more help"
+        else
+        out "  -h [c]             Show less help or when c=l License, c=s Source of ${txtBold}$me${txtClean}"
+        out "  -H                 Show this help"
+        fi
         out "  -l [c]             List jobs, c=i by ID"
         out "  -P                 Process jobs or trigger daemon to continue"
         out "  -p <job-id> <prio> Change job priority 3-8"
         out "  -r <job-id>        Resume a job"
         out "  -s <job-id>        Stop a job"
+        if [[ $opt == "H" ]] ; then
         out ""
         out "${txtBold}Notes:${txtClean}"
         out "  • The first form schedule a new copy task"
@@ -830,6 +845,7 @@ do
         out "  Show status"
         out "    $me -D"
         out ""
+        fi
         exit ; ;;
   esac
 done
