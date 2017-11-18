@@ -25,6 +25,7 @@ To change this edit in the source the setting of "simulationMode" from "1" to "0
     -l [c]             List jobs, c=i by ID
     -P                 Process jobs or trigger daemon to continue
     -p <job-id> <prio> Change job priority 3-8
+    -R                 Copy recursive
     -r <job-id>        Resume a job
     -s <job-id>        Stop a job
     -T                 Tidy up all job data

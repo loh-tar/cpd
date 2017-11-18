@@ -23,6 +23,7 @@ declare -r me=$(basename "$0")
 declare -r version="0.1pre1"
 declare -r vDate="Nov 2017"
 declare -r simulationMode="1"
+declare    optNoRecursiv="1"
 
 declare -r tmpDir="/tmp/$me/user-$(id -un)"
 declare -r jobFile="$tmpDir/jobs"               # All jobs as key/value
@@ -775,7 +776,20 @@ addNewJob() {
     [[ ! -e "$1" ]] && exitError "File not found: $1"
 
     if [[ -d "$1" ]] ; then
-      info "Omit directory: $1\n"
+      if (( optNoRecursiv )) ; then
+        info "Omit directory: $1\n"
+        continue
+      else
+        # Works at least with spaces in file names
+        # TODO: Needs to be tested with really crude file names
+        while read s f # Size and Filename, delivered by find below
+        do
+          let bytes+=s
+          files+=("${f#./}")
+          (( i++ ))
+        done <<< $(find $1 -type f -printf "%s %p\n")
+      fi
+
       continue
     fi
 
@@ -847,7 +861,7 @@ do
         out ""
         fi
         out "${txtBold}Usage:${txtClean}"
-        out "  $me <dest-dir> <source>..."
+        out "  $me [-R] <dest-dir> <source>..."
         out "  $me <command> [<argument>...]"
         out ""
         out "${txtBold}Commands are:${txtClean}"
@@ -864,6 +878,7 @@ do
         out "  -l [c]             List jobs, c=i by ID"
         out "  -P                 Process jobs or trigger daemon to continue"
         out "  -p <job-id> <prio> Change job priority 3-8"
+        out "  -R                 Copy recursive"
         out "  -r <job-id>        Resume a job"
         out "  -s <job-id>        Stop a job"
         out "  -T                 Tidy up all job data"
@@ -892,14 +907,16 @@ do
 done
 
 OPTIND="1"
-while getopts ?C:Dlp:Pr:s:T opt
+while getopts ?C:Dlp:PRr:s:T opt
 do
+
   case $opt in
     C)  cmdCancel $OPTARG         ; exit ; ;;
     D)  cmdDaemonize $@           ; exit ; ;;
     l)  shift $(( $OPTIND - 1 ))
         cmdList $1                ; exit ; ;;
     P)  cmdProcess                ; exit ; ;;
+    R)  optNoRecursiv="0"                ; ;;
     p)  shift $(( $OPTIND - 1 ))
         cmdChangePrio $OPTARG $@  ; exit ; ;;
     r)  cmdResume $OPTARG         ; exit ; ;;
@@ -909,6 +926,8 @@ do
     \?) exitError "Need help? Use: $me -h"  ; ;;
   esac
 done
+
+shift $(( $OPTIND - 1 ))
 
 # At this point we have a new job to enqueue
 [[ -d "$1" ]] || exitError "Destination must be a directory"
