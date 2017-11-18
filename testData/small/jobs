@@ -5,7 +5,7 @@
 1:DRIVE:/dev/sda
 1:HOME:/home/you/somewhere
 1:TARGET:'/media/a/foo'
-1:ARGUMENTS:'/media/data/foo'
+1:FILES:'/media/data/foo'
 2:PRIO:7
 2:STATUS:pending
 2:DONE:?
@@ -13,7 +13,7 @@
 2:DRIVE:/dev/sda
 2:HOME:/home/you/somewhere
 2:TARGET:'/media/a/foo'
-2:ARGUMENTS:'/media/data/bar'
+2:FILES:'/media/data/bar'
 3:PRIO:5
 3:STATUS:pending
 3:DONE:?
@@ -21,7 +21,7 @@
 3:DRIVE:/dev/sdd
 3:HOME:/home/you/somewhere
 3:TARGET:'/media/d/foo'
-3:ARGUMENTS:'/media/data/raz' '/media/data/baz'
+3:FILES:'/media/data/raz' '/media/data/baz'
 4:PRIO:3
 4:STATUS:pending
 4:DONE:?
@@ -29,7 +29,7 @@
 4:DRIVE:luks-as2dws34xy
 4:HOME:/home/you/somewhere
 4:TARGET:'/media/luks/foo'
-4:ARGUMENTS:'data1'
+4:FILES:'data1'
 5:PRIO:3
 5:STATUS:pending
 5:DONE:?
@@ -37,7 +37,7 @@
 5:DRIVE:luks-as2dws34xy
 5:HOME:/home/you/somewhere
 5:TARGET:'/media/luks/foo'
-5:ARGUMENTS:'secret stuff' 'important data'
+5:FILES:'secret stuff' 'important data'
 6:PRIO:3
 6:STATUS:pending
 6:DONE:?
@@ -45,4 +45,16 @@
 6:DRIVE:/dev/sdc
 6:HOME:/home/you/somewhere
 6:TARGET:'/media/c/foo'
-6:ARGUMENTS:'cpd' 'cpd1'
+6:FILES:'cpd' 'cpd1'
+1:BYTES:7425
+1:SIZE:7,5K
+2:BYTES:12969
+2:SIZE:13K
+3:BYTES:6128
+3:SIZE:6,2K
+4:BYTES:18414
+4:SIZE:19K
+5:BYTES:5135
+5:SIZE:5,2K
+6:BYTES:2561
+6:SIZE:2,6K

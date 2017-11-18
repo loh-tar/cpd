@@ -20,7 +20,7 @@
 #   MA 02110-1301, USA.
 
 declare -r me=$(basename "$0")
-declare -r version="0.1pre0"
+declare -r version="0.1pre1"
 declare -r vDate="Nov 2017"
 declare -r simulationMode="1"
 
@@ -230,8 +230,8 @@ outJobLine() {
 
   printf -v txt "$format"                                     \
     "$id" "${jobData["$id:PRIO"]}" "${jobData["$id:STATUS"]}" \
-    "${jobData["$id:DONE"]}" "${jobData["$id:DRIVE"]}"        \
-    "$target" "${jobData["$id:ARGUMENTS"]}"
+    "${jobData["$id:SIZE"]}" "${jobData["$id:DRIVE"]}"        \
+    "$target" "${jobData["$id:FILES"]}"
 
   out "${txt:0:$screenWidth}"
 }
@@ -250,8 +250,8 @@ cmdList() {
       ;;
 
     *)
-      local txt=" ID PRIO STATUS   DONE  DRIVE            TARGET                ARGUMENTS"
-      local format="%3s   %s  %-8s  %3s  %-15s  %-20s  %s"
+      local txt=" ID PRIO STATUS   SIZE  DRIVE            TARGET                FILES"
+      local format="%3s   %s  %-8s %4s  %-15s  %-20s  %s"
       out "${txt:0:$screenWidth}"
       readJobs
       ;;&
@@ -312,7 +312,7 @@ cmdCancel() {
     exitError "Job $1 status is: $(getJobValue "$1" "STATUS")"
   fi
 
-  out "Cancel job $1: $(getJobValue $1 "ARGUMENTS")"
+  out "Cancel job $1: $(getJobValue $1 "FILES")"
   setLock || exitError "Job not canceled"
   changeStatus "$1" "CANCEL"
   unLock
@@ -538,7 +538,7 @@ cmdDaemonize() {
 startJob() {
   # Need parms: id
   procInfo "$1" "Start"
-  arg=${jobData["$1:ARGUMENTS"]}
+  arg=${jobData["$1:FILES"]}
 
 if (( simulationMode )) ; then
   local cmd2 st=$((($RANDOM % 9) * 2)) # SleepTime
@@ -549,7 +549,7 @@ if (( simulationMode )) ; then
   esac
 fi
 
-  local cmd="cp -t ${jobData["$1:TARGET"]} ${jobData["$1:ARGUMENTS"]}"
+  local cmd="cp -t ${jobData["$1:TARGET"]} ${jobData["$1:FILES"]}"
 
   changeStatus "$1" "starting"
 
@@ -626,7 +626,7 @@ procInfo() {
   cutLeft "20" target
 
   printf -v txt "$format" "$2" "$1" "${jobData["$1:DRIVE"]}" \
-                "$target" "${jobData["$1:ARGUMENTS"]}"
+                "$target" "${jobData["$1:FILES"]}"
 
   info "%s\n" "$clearLine${txt:0:$screenWidth}"
 }
@@ -757,18 +757,44 @@ addNewJob() {
   local drive=$(df -P "$1" | tail -n1 | cut -d' ' -f1)   # Now /dev/foo/drive123
   if [[ "$drive" =~ /dev/mapper ]] ; then
     drive=${drive#/dev/mapper/}
-    drive=${drive:0:13}           # Use only first part of full name
+    drive=${drive:0:13}                   # Use only first part of full name
+# elif FIXME fill me
   else
-    drive=${drive%%[0-9]*}        # Drive only matters, not partition
+    drive=${drive%%[0-9]*}                # Drive only matters, not partition
   fi
+
+  # Collect some statistics, and because we loop so nice, remove directories
+  # from file list. They would only cause warnings when running cp without -r
+  local target="${1#./}"                  # Remove leading ./ because it looks ugly,
+  target="${target@Q}"                    # I hope it cause no trouble, @Q=Quote arg
+  [[ $target == "''" ]] && target="'.'"   # Keep quotes just for consistency
+
+  local -a files=() i="0" bytes="0"
+  while shift; (( $# ))
+  do
+    [[ ! -e "$1" ]] && exitError "File not found: $1"
+
+    if [[ -d "$1" ]] ; then
+      info "Omit directory: $1\n"
+      continue
+    fi
+
+    let bytes+=$(stat -c%s "$1")
+    files+=("${1#./}")
+    (( i++ ))
+  done
+
+  (( ! ${#files} )) && exitError "No files to copy"
 
   checkTmpDir
   setLock || exitError "Job not added"
   # FIXME: Would be nice to have a progress info in DONE.
-  # Could be achieved by pre find-ing all source files, sum each size and copy
-  # one file after the other.
   newId=$(nextJobId)
-  out "New job: $newId  cp -t $*"
+  local total=$(numfmt --to=si $bytes)
+
+  out "New job: $newId ($i files, $total total)"
+  out "Target : $target"
+  out "Files  : ${files[*]@Q}"
 
   # PRIOrity is associated to STATUS as follows
   # STOPPING RESUME CANCEL running stopped pending done canceled
@@ -780,9 +806,10 @@ addNewJob() {
   addToJobFile "$newId" "DATE" "$date"
   addToJobFile "$newId" "DRIVE" "$drive"
   addToJobFile "$newId" "HOME" "$PWD"        # Needed, the daemon run in /
-  addToJobFile "$newId" "TARGET" "${1@Q}"    # Arguments will quoted
-  shift
-  addToJobFile "$newId" "ARGUMENTS" "${*@Q}"
+  addToJobFile "$newId" "TARGET" "$target"
+  addToJobFile "$newId" "FILES" "${files[*]@Q}"
+  addToJobFile "$newId" "BYTES" "$bytes"
+  addToJobFile "$newId" "SIZE" "$total"
 
   unLock
 

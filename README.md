@@ -19,7 +19,7 @@ To change this edit in the source the setting of "simulationMode" from "1" to "0
 
     -C <job-id>        Cancel a pending or kill a running job
     -D [<action>]      Print status and start/stop the daemon or job processing
-                      <action> can be +|-|start|stop
+                       <action> can be +|-|start|stop
     -h [c]             Show this help or when c=l License, c=s Source of cpd
     -H                 Show more help
     -l [c]             List jobs, c=i by ID
@@ -56,31 +56,31 @@ Process the jobs in the foreground...
     Start with clean tmp dir
 
     Run: cpd -l
-    ID PRIO STATUS   DONE  DRIVE            TARGET                ARGUMENTS
-      4   3  pending     ?  luks-as2dws34xy  '/media/luks/foo'     'data1'
-      5   3  pending     ?  luks-as2dws34xy  '/media/luks/foo'     'secret stuf
-      6   3  pending     ?  /dev/sdc         '/media/c/foo'        'cpd' 'cpd1'
-      3   5  pending     ?  /dev/sdd         '/media/d/foo'        '/media/data
-      1   6  pending     ?  /dev/sda         '/media/a/foo'        '/media/data
-      2   7  pending     ?  /dev/sda         '/media/a/foo'        '/media/data
+    ID PRIO STATUS   SIZE  DRIVE            TARGET                FILES
+      4   3  pending   19K  luks-as2dws34xy  '/media/luks/foo'     'data1'
+      5   3  pending  5,2K  luks-as2dws34xy  '/media/luks/foo'     'secret stuff' 'important d
+      6   3  pending  2,6K  /dev/sdc         '/media/c/foo'        'cpd' 'cpd1'
+      3   5  pending  6,2K  /dev/sdd         '/media/d/foo'        '/media/data/raz' '/media/d
+      1   6  pending  7,5K  /dev/sda         '/media/a/foo'        '/media/data/foo'
+      2   7  pending   13K  /dev/sda         '/media/a/foo'        '/media/data/bar'
 
     Run: cpd -P
     Start   [  4] [luks-as2dws34xy]    '/media/luks/foo' <- 'data1'
     Start   [  6] [/dev/sdc       ]       '/media/c/foo' <- 'cpd' 'cpd1'
-    ERROR   [  6] [/dev/sdc       ]       '/media/c/foo' <- 'cpd' 'cpd1'
-    Start   [  3] [/dev/sdd       ]       '/media/d/foo' <- '/media/data/raz' '
+    Start   [  3] [/dev/sdd       ]       '/media/d/foo' <- '/media/data/raz' '/media/data/baz
     Start   [  1] [/dev/sda       ]       '/media/a/foo' <- '/media/data/foo'
-    Cancel  [  5] [luks-as2dws34xy]    '/media/luks/foo' <- 'secret stuff' 'imp
+    Cancel  [  5] [luks-as2dws34xy]    '/media/luks/foo' <- 'secret stuff' 'important data'
+    Killed  [  6] [/dev/sdc       ]       '/media/c/foo' <- 'cpd' 'cpd1'
     Stop    [  4] [luks-as2dws34xy]    '/media/luks/foo' <- 'data1'
-    Done    [  3] [/dev/sdd       ]       '/media/d/foo' <- '/media/data/raz' '
-    Resume  [  4] [luks-as2dws34xy]    '/media/luks/foo' <- 'data1'
-    Done    [  4] [luks-as2dws34xy]    '/media/luks/foo' <- 'data1'
     Done    [  1] [/dev/sda       ]       '/media/a/foo' <- '/media/data/foo'
     Start   [  2] [/dev/sda       ]       '/media/a/foo' <- '/media/data/bar'
+    Resume  [  4] [luks-as2dws34xy]    '/media/luks/foo' <- 'data1'
+    Done    [  3] [/dev/sdd       ]       '/media/d/foo' <- '/media/data/raz' '/media/data/baz
+    Done    [  4] [luks-as2dws34xy]    '/media/luks/foo' <- 'data1'
     Done    [  2] [/dev/sda       ]       '/media/a/foo' <- '/media/data/bar'
     All done
 
-**Note:** These errors are features, but you may find true bugs
+**Note:** If there are errors to read, they are features, but you may find true bugs
 
 ### Install
 
