@@ -784,6 +784,8 @@ addNewJob() {
         # TODO: Needs to be tested with really crude file names
         while read s f # Size and Filename, delivered by find below
         do
+          [[ "${files[*]}" =~ "$f" ]] && continue
+          # echo "Add 2 $f"
           let bytes+=s
           files+=("${f#./}")
           (( i++ ))
@@ -793,6 +795,8 @@ addNewJob() {
       continue
     fi
 
+    [[ "${files[*]}" =~ "$1" ]] && continue
+    # echo "Add 1 $1"
     let bytes+=$(stat -c%s "$1")
     files+=("${1#./}")
     (( i++ ))
