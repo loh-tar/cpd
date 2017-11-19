@@ -247,6 +247,17 @@ cmdList() {
   setScreenWidth
 
   case "$type" in
+    e|-le)
+      read max < "$tmpDir/next-id"
+      for (( id=1; id < max; id++ ))
+      do
+        [[ -s "$tmpDir/error.log-job-$id" ]] || continue
+        out ">>>>> Error log of job $id"
+        cat "$tmpDir/error.log-job-$id"
+        out ""
+      done
+      ;;
+
     NoJobs)
       out "No jobs to list"
       ;;
@@ -924,7 +935,7 @@ do
         out "  -h [c]             Show less help or when c=l License, c=s Source of ${txtBold}$me${txtClean}"
         out "  -H                 Show this help"
         fi
-        out "  -l [c]             List jobs, c=i by ID"
+        out "  -l [c]             List jobs, c=i by ID, or errors c=e"
         out "  -o <cp-opt>        Add <cp-opt> to the called cp command"
         out "  -P                 Process jobs or trigger daemon to continue"
         out "  -p <job-id> <prio> Change job priority 3-8"

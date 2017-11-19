@@ -22,7 +22,7 @@ To change this edit in the source the setting of "simulationMode" from "1" to "0
                        <action> can be +|-|start|stop
     -h [c]             Show this help or when c=l License, c=s Source of cpd
     -H                 Show more help
-    -l [c]             List jobs, c=i by ID
+    -l [c]             List jobs, c=i by ID, or errors c=e
     -o <cp-opt>        Add <cp-opt> to the called cp command
     -P                 Process jobs or trigger daemon to continue
     -p <job-id> <prio> Change job priority 3-8
@@ -71,16 +71,24 @@ Process the jobs in the foreground...
     Start   [  6] [/dev/sdc       ]       '/media/c/foo' <- 'cpd' 'cpd1'
     Start   [  3] [/dev/sdd       ]       '/media/d/foo' <- '/media/data/raz' '/media/data/baz'
     Start   [  1] [/dev/sda       ]       '/media/a/foo' <- '/media/data/foo'
-    ERROR   [  1] [/dev/sda       ]       '/media/a/foo' <- '/media/data/foo'
-    Start   [  2] [/dev/sda       ]       '/media/a/foo' <- '/media/data/bar'
     Stop    [  4] [luks-as2dws34xy]    '/media/luks/foo' <- 'data1'
-    Cancel  [  5] [luks-as2dws34xy]    '/media/luks/foo' <- 'secret stuff' 'important data'
+    Start   [  5] [luks-as2dws34xy]    '/media/luks/foo' <- 'secret stuff' 'important data'
+    ERROR   [  3] [/dev/sdd       ]       '/media/d/foo' <- '/media/data/raz' '/media/data/baz'
+    Killed  [  5] [luks-as2dws34xy]    '/media/luks/foo' <- 'secret stuff' 'important data'
     Killed  [  6] [/dev/sdc       ]       '/media/c/foo' <- 'cpd' 'cpd1'
-    Done    [  3] [/dev/sdd       ]       '/media/d/foo' <- '/media/data/raz' '/media/data/baz'
     Resume  [  4] [luks-as2dws34xy]    '/media/luks/foo' <- 'data1'
+    Done    [  1] [/dev/sda       ]       '/media/a/foo' <- '/media/data/foo'
+    Start   [  2] [/dev/sda       ]       '/media/a/foo' <- '/media/data/bar'
+    StartERR[  2] [/dev/sda       ]       '/media/a/foo' <- '/media/data/bar'
     Done    [  4] [luks-as2dws34xy]    '/media/luks/foo' <- 'data1'
-    Done    [  2] [/dev/sda       ]       '/media/a/foo' <- '/media/data/bar'
     All done
+
+    Run cpd -le
+    >>>>> Error log of job 2
+    ./cpd: line 587: SomeWrongComand: command not found
+
+    >>>>> Error log of job 3
+    What ever was wrong
 
 **Note:** If there are errors to read, they are features, but you may find true bugs
 

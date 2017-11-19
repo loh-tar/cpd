@@ -15,10 +15,10 @@ else
 fi
 
 
-( sleep 2
+( sleep 1
+  ./cpd -s 4 >/dev/null 2>&1
   ./cpd -C 5 >/dev/null 2>&1
   ./cpd -C 6 >/dev/null 2>&1
-  ./cpd -s 4 >/dev/null 2>&1
   sleep 2
  ./cpd -r 4 >/dev/null 2>&1
 )& >/dev/null 2>&1
@@ -30,3 +30,7 @@ echo "Run: cpd -l"
 echo
 echo "Run: cpd -P"
 ./cpd -P
+
+echo
+echo "Run cpd -le"
+./cpd -le
