@@ -20,7 +20,7 @@
 #   MA 02110-1301, USA.
 
 declare -r me=$(basename "$0")
-declare -r version="0.1pre1"
+declare -r version="0.1pre2"
 declare -r vDate="Nov 2017"
 declare -r simulationMode="1"
 declare    optNoRecursiv="1"
@@ -256,6 +256,10 @@ cmdList() {
         cat "$tmpDir/error.log-job-$id"
         out ""
       done
+      ;;
+
+    l|-ll)
+      cat "$tmpDir/job.log"
       ;;
 
     NoJobs)
@@ -935,7 +939,7 @@ do
         out "  -h [c]             Show less help or when c=l License, c=s Source of ${txtBold}$me${txtClean}"
         out "  -H                 Show this help"
         fi
-        out "  -l [c]             List jobs, c=i by ID, or errors c=e"
+        out "  -l [c]             List jobs, c=i by ID, or errors c=e, or the job log c=l"
         out "  -o <cp-opt>        Add <cp-opt> to the called cp command"
         out "  -P                 Process jobs or trigger daemon to continue"
         out "  -p <job-id> <prio> Change job priority 3-8"
