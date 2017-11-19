@@ -24,6 +24,7 @@ declare -r version="0.1pre1"
 declare -r vDate="Nov 2017"
 declare -r simulationMode="1"
 declare    optNoRecursiv="1"
+declare    optExtraCopy=""
 
 declare -r tmpDir="/tmp/$me/user-$(id -un)"
 declare -r jobFile="$tmpDir/jobs"               # All jobs as key/value
@@ -550,7 +551,7 @@ if (( simulationMode )) ; then
   esac
 fi
 
-  local cmd="cp -t ${jobData["$1:TARGET"]} ${jobData["$1:FILES"]}"
+  local cmd="cp${jobData["$1:CPYOPT"]} ${jobData["$1:TARGET"]} ${jobData["$1:FILES"]}"
 
   changeStatus "$1" "starting"
 
@@ -764,6 +765,30 @@ addNewJob() {
     drive=${drive%%[0-9]*}                # Drive only matters, not partition
   fi
 
+  # Examine optExtraCopy
+  # Remove, we do it: -R, -r, --recursive
+  # Not allowed: -i, --interactive, -T, --no-target-directory --help --version
+  # Special case: -a, --archive
+  # FIXME What else?
+  local copyOptions=""
+  for o in $optExtraCopy
+  do
+    if [[ $o =~ ^-[0-9a-Z][0-9a-Z]+ ]] ; then
+      exitError "Not allowed yet, sorry. Please split to single options: $o"
+    elif [[ $o =~ ^-[iT] ]] ; then
+      exitError "Not allowed, sorry: $o"
+    elif [[ "--recursive --no-target-directory --help --version" =~ $o ]] ; then
+      exitError "Not allowed, sorry: $o"
+    elif [[ $o =~ ^-[rR] ]] ; then
+      optNoRecursiv="0"
+    elif [[ $o =~ ^-a || "$o" == "--archive" ]] ; then
+      optNoRecursiv="0"
+      copyOptions="$copyOptions -a"
+    else
+      copyOptions="$copyOptions $o"
+    fi
+  done
+
   # Collect some statistics, and because we loop so nice, remove directories
   # from file list. They would only cause warnings when running cp without -r
   local target="${1#./}"                  # Remove leading ./ because it looks ugly,
@@ -813,6 +838,7 @@ addNewJob() {
   out "New job: $newId ($i files, $total total)"
   out "Target : $target"
   out "Files  : ${files[*]@Q}"
+  (( ${#copyOptions} )) && out "Options: $copyOptions"
 
   # PRIOrity is associated to STATUS as follows
   # STOPPING RESUME CANCEL running stopped pending done canceled
@@ -828,6 +854,7 @@ addNewJob() {
   addToJobFile "$newId" "FILES" "${files[*]@Q}"
   addToJobFile "$newId" "BYTES" "$bytes"
   addToJobFile "$newId" "SIZE" "$total"
+  addToJobFile "$newId" "CPYOPT" "$copyOptions -t"
 
   unLock
 
@@ -865,7 +892,7 @@ do
         out ""
         fi
         out "${txtBold}Usage:${txtClean}"
-        out "  $me [-R] <dest-dir> <source>..."
+        out "  $me [-o <cp-opt>][-R] <dest-dir> <source>..."
         out "  $me <command> [<argument>...]"
         out ""
         out "${txtBold}Commands are:${txtClean}"
@@ -880,6 +907,7 @@ do
         out "  -H                 Show this help"
         fi
         out "  -l [c]             List jobs, c=i by ID"
+        out "  -o <cp-opt>        Add <cp-opt> to the called cp command"
         out "  -P                 Process jobs or trigger daemon to continue"
         out "  -p <job-id> <prio> Change job priority 3-8"
         out "  -R                 Copy recursive"
@@ -893,10 +921,11 @@ do
         out "  • The first form schedule a new copy task"
         out "  • The second form list or change tasks"
         out "  • The job priority is not static and affect only the start time. Highest priority is 0"
-        out "  • The executed copy command will be 'cp -t <dest-dir> <source>' no extras, sorry"
+        out "  • The executed copy command will be 'cp <cp-opt> -t <dest-dir> <source>'"
         out "  • -D stops job processing, if so, or stops the daemon at all, if not"
         out "     Adding a new job trigger the daemon to continue job processing, there is no blocking"
         out "  • -T does nothing else than 'rm -rf $tmpDir'"
+        out "  • Enclose <cp-opt> in quotes if you need more than one option"
         out ""
         out "${txtBold}Examples:${txtClean}"
         out "  Enqueue new copy task"
@@ -911,7 +940,7 @@ do
 done
 
 OPTIND="1"
-while getopts ?C:Dlp:PRr:s:T opt
+while getopts ?C:Dlo:p:PRr:s:T opt
 do
 
   case $opt in
@@ -919,6 +948,7 @@ do
     D)  cmdDaemonize $@           ; exit ; ;;
     l)  shift $(( $OPTIND - 1 ))
         cmdList $1                ; exit ; ;;
+    o)  optExtraCopy="$OPTARG"            ; ;;
     P)  cmdProcess                ; exit ; ;;
     R)  optNoRecursiv="0"                ; ;;
     p)  shift $(( $OPTIND - 1 ))

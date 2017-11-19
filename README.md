@@ -12,7 +12,7 @@ To change this edit in the source the setting of "simulationMode" from "1" to "0
 
 ### Usage
 
-    cpd <dest-dir> <source>...
+    cpd [-o <cp-opt>][-R] <dest-dir> <source>...
     cpd <command> [<argument>...]
 
 ### Commands are:
@@ -23,6 +23,7 @@ To change this edit in the source the setting of "simulationMode" from "1" to "0
     -h [c]             Show this help or when c=l License, c=s Source of cpd
     -H                 Show more help
     -l [c]             List jobs, c=i by ID
+    -o <cp-opt>        Add <cp-opt> to the called cp command
     -P                 Process jobs or trigger daemon to continue
     -p <job-id> <prio> Change job priority 3-8
     -R                 Copy recursive
@@ -59,24 +60,24 @@ Process the jobs in the foreground...
     Run: cpd -l
     ID PRIO STATUS   SIZE  DRIVE            TARGET                FILES
       4   3  pending   19K  luks-as2dws34xy  '/media/luks/foo'     'data1'
-      5   3  pending  5,2K  luks-as2dws34xy  '/media/luks/foo'     'secret stuff' 'important d
+      5   3  pending  5,2K  luks-as2dws34xy  '/media/luks/foo'     'secret stuff' 'important data'
       6   3  pending  2,6K  /dev/sdc         '/media/c/foo'        'cpd' 'cpd1'
-      3   5  pending  6,2K  /dev/sdd         '/media/d/foo'        '/media/data/raz' '/media/d
+      3   5  pending  6,2K  /dev/sdd         '/media/d/foo'        '/media/data/raz' '/media/data/baz'
       1   6  pending  7,5K  /dev/sda         '/media/a/foo'        '/media/data/foo'
       2   7  pending   13K  /dev/sda         '/media/a/foo'        '/media/data/bar'
 
     Run: cpd -P
     Start   [  4] [luks-as2dws34xy]    '/media/luks/foo' <- 'data1'
     Start   [  6] [/dev/sdc       ]       '/media/c/foo' <- 'cpd' 'cpd1'
-    Start   [  3] [/dev/sdd       ]       '/media/d/foo' <- '/media/data/raz' '/media/data/baz
+    Start   [  3] [/dev/sdd       ]       '/media/d/foo' <- '/media/data/raz' '/media/data/baz'
     Start   [  1] [/dev/sda       ]       '/media/a/foo' <- '/media/data/foo'
+    ERROR   [  1] [/dev/sda       ]       '/media/a/foo' <- '/media/data/foo'
+    Start   [  2] [/dev/sda       ]       '/media/a/foo' <- '/media/data/bar'
+    Stop    [  4] [luks-as2dws34xy]    '/media/luks/foo' <- 'data1'
     Cancel  [  5] [luks-as2dws34xy]    '/media/luks/foo' <- 'secret stuff' 'important data'
     Killed  [  6] [/dev/sdc       ]       '/media/c/foo' <- 'cpd' 'cpd1'
-    Stop    [  4] [luks-as2dws34xy]    '/media/luks/foo' <- 'data1'
-    Done    [  1] [/dev/sda       ]       '/media/a/foo' <- '/media/data/foo'
-    Start   [  2] [/dev/sda       ]       '/media/a/foo' <- '/media/data/bar'
+    Done    [  3] [/dev/sdd       ]       '/media/d/foo' <- '/media/data/raz' '/media/data/baz'
     Resume  [  4] [luks-as2dws34xy]    '/media/luks/foo' <- 'data1'
-    Done    [  3] [/dev/sdd       ]       '/media/d/foo' <- '/media/data/raz' '/media/data/baz
     Done    [  4] [luks-as2dws34xy]    '/media/luks/foo' <- 'data1'
     Done    [  2] [/dev/sda       ]       '/media/a/foo' <- '/media/data/bar'
     All done
@@ -94,7 +95,7 @@ Copy _cpd_ somewhere to your $PATH, that's all.
   - Respect the home dir of the jobs
   - Add command to view the various log files
   - Progress info about each running job
-  - Full _cp_ support
+  - [Done(?) Please test -o] Full _cp_ support
   - Improve detection of true target drives
   - Enhance this list
 
