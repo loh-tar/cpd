@@ -376,6 +376,7 @@ cmdTidy() {
 cmdProcess() {
   notifyDaemon && exitGood "Daemon already running with pid $daemonPID is triggered to do the job"
 
+  cd "$tmpDir"
   set -o monitor
   trap "recheckJobList=1" USR1 2>/dev/null
   trap "stopRunning=1; info '${clearLine}Received signal to stop, will wait for running jobs\n'" USR2 2>/dev/null
@@ -422,6 +423,9 @@ cmdDaemonize() {
           exec 0</dev/null
 
           printf "%(%FT%T)T cpd daemon started with pid $$\n" "-1"
+
+          # Mike suggest to run a daemon in / but I think that should be ok
+          cd "$tmpDir"
 
           # FIXME: This part is almost a copy of cmdProcess,
           # split it into parts/functions to reduce redundancy
@@ -546,7 +550,7 @@ if (( simulationMode )) ; then
   local cmd2 st=$((($RANDOM % 9) * 2)) # SleepTime
   case $st in
     0)  cmd2="echo 'StartERR $1'; SomeWrongComand;" ; ;;
-    2)  cmd2="echo 'ERRORJob $1'; slpeep $st; echo 'What ever was wrong' >&2; exit 1;" ; ;;
+    2)  cmd2="echo 'ERRORJob $1'; sleep $st; echo 'What ever was wrong' >&2; exit 1;" ; ;;
     *)  cmd2="echo 'SLEEPJob $1 - ${st}s'; sleep $st;" ; ;;
   esac
 fi
@@ -554,6 +558,19 @@ fi
   local cmd="cp${jobData["$1:CPYOPT"]} ${jobData["$1:TARGET"]} ${jobData["$1:FILES"]}"
 
   changeStatus "$1" "starting"
+
+  local jobHome="${jobData["$1:HOME"]}"
+
+  # Assume we have only wrong HOME settings in our test data,
+  # force an error when sleep time is 4
+  (( simulationMode && st != 4 )) && jobHome="$HOME"
+
+  if ! cd "$jobHome" 2>/dev/null ; then
+    error "Job home is gone: ${jobData["$1:HOME"]}" 2>$tmpDir/error.log-job-$1
+    changeStatus "$1" "NOSTART"
+    procInfo "$1" "StartERR"
+    return
+  fi
 
 if (( simulationMode )) ; then
   (eval "$cmd2" > $tmpDir/msg.log-job-$1 2>$tmpDir/error.log-job-$1)&
@@ -563,6 +580,7 @@ else
   printf "%(%FT%T)T [Job $1] %s\n" "-1" "$cmd" >> "$tmpDir/job.log"
 fi
 
+  cd "$OLDPWD"
   jobPids[$1]="$!"
   modifyJob "$1" "PID" "$!" # FIXME: After a quick error would that be a wrong info
 }

@@ -92,7 +92,6 @@ Copy _cpd_ somewhere to your $PATH, that's all.
 
 ### TODO
 
-  - Respect the home dir of the jobs
   - Add command to view the various log files
   - Progress info about each running job
   - [Done(?) Please test -o] Full _cp_ support
