@@ -434,6 +434,7 @@ cmdDaemonize() {
 
       case $2 in
         DAEMON) # 3. doomed
+          checkTmpDir
           exec >$tmpDir/outfile-daemon
           exec 2>$tmpDir/errfile-daemon
           exec 0</dev/null
