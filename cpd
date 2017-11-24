@@ -76,6 +76,7 @@ checkTmpDir() {
 
   mkdir -p -m 700 "$tmpDir"
   touch "$jobFile"
+  touch "$jobList"
   echo "1" > "$tmpDir/next-id"
   unLock
 }
@@ -150,6 +151,7 @@ updateJobList() {
   # Do NOT call updateJobList after add or change a job!
   # That would confuse processJobList
   readJobs
+  [[ -s "$jobFile" ]] || return
   rm -f "$jobList"
 
   read max < "$tmpDir/next-id"
@@ -708,8 +710,7 @@ checkChilds() {
 }
 
 processJobList() {
-  if ! setLock ; then  error "List not processed"; return 1; fi
-
+  setLock || { error "List not processed"; return 1; }
   updateJobList
   setScreenWidth
 
