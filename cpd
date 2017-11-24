@@ -303,7 +303,7 @@ getDaemonPid() {
   if [[ -f "$tmpDir/daemon-pid" ]] ; then
     daemonPID=$(< "$tmpDir/daemon-pid")
     local pid2=($(ps -C $me -o pid=))
-    [[ "$pid2[*]" =~ "$daemonPID" ]] || exitError "FATAL: Daemon not found" # Should never happens
+    [[ "${pid2[*]}" =~ "$daemonPID" ]] || exitError "FATAL: Daemon not found" # Should never happens
     return 0
   else
     daemonPID="0"
