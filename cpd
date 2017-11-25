@@ -439,8 +439,8 @@ cmdDaemonize() {
       case $2 in
         DAEMON) # 3. doomed
           checkTmpDir
-          exec >$tmpDir/outfile-daemon
-          exec 2>$tmpDir/errfile-daemon
+          exec >"$tmpDir/daemon-out.log"
+          exec 2>"$tmpDir/daemon-error.log"
           exec 0</dev/null
 
           printf "%(%FT%T)T cpd daemon started with pid $$\n" "-1"
