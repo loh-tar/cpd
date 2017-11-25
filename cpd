@@ -540,7 +540,9 @@ cmdDaemonize() {
       if getDaemonPid ; then
         out "Daemon is running with pid $daemonPID"
         cat "$tmpDir/processStatus" | cut -c-$screenWidth
-        if [[ -f "$tmpDir"/job-status-* ]] ; then
+        # Thanks to Daniel
+        # https://unix.stackexchange.com/a/325581
+        if compgen -G "$tmpDir/job-status-*" > /dev/null; then
           out ""
           out "Running jobs:"
           cat "$tmpDir"/job-status-* | cut -c-$screenWidth
