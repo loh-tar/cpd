@@ -207,10 +207,11 @@ readJobs() {
 }
 
 setScreenWidth() {
-  # Is that the right way to adjust to terminal width?
-  screenWidth=$(stty size|cut -d' ' -f2)
-  # Well there is bash build in checkwinsize/COLUMNS but that sound expensive
-  #  > bash checks the window size after each command
+  screenWidth=$(stty size 2>/dev/null |cut -d' ' -f2)
+  # If stty has no success, e.g. running as daemon, in a pipe or some
+  # dumb terminal, ensure not all is cut from output
+  # https://github.com/loh-tar/cpd/issues/4
+  (( screenWidth )) || screenWidth="9999"
 }
 
 cutLeft() {
