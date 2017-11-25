@@ -51,6 +51,8 @@ Process the jobs in the foreground...
 ...and take a look how it is going
 
     watch -n1 cpd -l
+or
+    watch -n1 cpd -D
 
 ### Running Test
 
@@ -101,9 +103,9 @@ Copy _cpd_ somewhere to your $PATH, that's all.
 ### TODO
 
   - Add command to view the various log files
-  - Progress info about each running job
   - [Done(?) Please test -o] Full _cp_ support
   - Improve detection of true target drives
+  - BUG: Does not handle filenames with newline
   - Enhance this list
 
 ### Credits

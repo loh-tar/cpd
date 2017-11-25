@@ -20,11 +20,12 @@
 #   MA 02110-1301, USA.
 
 declare -r me=$(basename "$0")
-declare -r version="0.1pre2"
+declare -r version="0.1pre3"
 declare -r vDate="Nov 2017"
 declare -r simulationMode="1"
 declare    optRecursive="0"
 declare    optMerge="0"
+declare    optNoProgress="0"
 declare    optExtraCopy=""
 
 declare -r tmpDir="/tmp/$me/user-$(id -un)"
@@ -537,13 +538,28 @@ cmdDaemonize() {
     status)
       if getDaemonPid ; then
         out "Daemon is running with pid $daemonPID"
-        out "Process status:"
         cat "$tmpDir/processStatus" | cut -c-$screenWidth
+        if [[ -f "$tmpDir"/job-status-* ]] ; then
+          out ""
+          out "Running jobs:"
+          cat "$tmpDir"/job-status-* | cut -c-$screenWidth
+        fi
       else
         out "No running daemon"
-        [[ -f "$jobFile" ]] && out "Job list:"
-        # FIXME: Instead of call cmdList calc a process status
-        cmdList
+      fi
+
+      if [[ -s "$jobFile" ]] ; then
+        out "\nJobs by status:"
+        for s in "Pending" "Done" "Canceled" "Killed" "Error"
+        do
+          local jobCount=$(grep -i "STATUS:$s" "$tmpDir/jobs" | wc -l)
+          (( jobCount )) || continue
+          local -a jobs=($(grep -i "STATUS:$s" "$tmpDir/jobs" | cut -d: -f1))
+          printf -v txt "  %-8s %5s: %s" "$s" "($jobCount)" "${jobs[*]}"
+          out "$txt"
+        done
+      else
+        out "\nNo jobs"
       fi
 
       exit 0
@@ -574,7 +590,7 @@ if (( simulationMode )) ; then
   esac
 fi
 
-  local cmd="cp${jobData["$1:CPYOPT"]} ${jobData["$1:TARGET"]} ${jobData["$1:FILES"]}"
+  local cmd="cp${jobData["$1:CPYOPT"]} ${jobData["$1:TARGET"]}"
 
   changeStatus "$1" "starting"
 
@@ -595,8 +611,62 @@ if (( simulationMode )) ; then
   (eval "$cmd2" > $tmpDir/msg.log-job-$1 2>$tmpDir/error.log-job-$1)&
   printf "%(%FT%T)T [Job $1]\nFake Job: %s\nTrue Job: %s\n\n" "-1" "$cmd2" "$cmd" >> "$tmpDir/job.log"
 else
-  (eval "$cmd" > $tmpDir/msg.log-job-$1 2>$tmpDir/error.log-job-$1)&
-  printf "%(%FT%T)T [Job $1] %s\n" "-1" "$cmd" >> "$tmpDir/job.log"
+  (
+    local err="0" i="0"
+
+    if (( optNoProgress  )) ; then
+      # Reading file names is tricky, discard size and convert to zero terminated
+      # list to ensure spaces are properly handled
+      cut -f2- "$tmpDir/job-files-$1" | tr '\n' '\000' | xargs -0   \
+        cp ${jobData["$1:CPYOPT"]} "${jobData["$1:TARGET"]}"        \
+          > "$tmpDir/msg.log-job-$1" 2>"$tmpDir/error.log-job-$1"
+
+      err="$?"
+      i="${jobData["$1:FCOUNT"]}"
+
+    else
+      local total="0"
+
+      writeJobStatus() {
+        printf "[Job: %3s, %4s] [Done: %3s%%] [ToDo: Files: %s, Bytes: %s]\n"  \
+          "$1" "${jobData["$1:SIZE"]}"                        \
+          "$(( 100 * $total / ${jobData["$1:BYTES"]} ))"      \
+          "$(( ${jobData["$1:FCOUNT"]} - $i ))"               \
+          "$(( ${jobData["$1:BYTES"]} - $total ))"            \
+          > "$tmpDir/job-status-$1" ;}
+
+      while read size file
+      do
+        (( i++ ))
+        cp ${jobData["$1:CPYOPT"]} "${jobData["$1:TARGET"]}" "$file"  \
+          >> "$tmpDir/msg.log-job-$1" 2>>"$tmpDir/error.log-job-$1"
+
+        if (( $? )) ; then
+          err="1"
+        else
+          let total+=size
+          if (( $SECONDS > 1 )) ; then
+            # Doing modifyJob here may be expensive, we waste already
+            # a lot of time. TODO:If we want an updated jobFile we could
+            # parse the job-status files in the daemon idle time
+            writeJobStatus "$1"
+            SECONDS="0"
+          fi
+        fi
+      done < "$tmpDir/job-files-$1"
+      # Instead of rm we could finally writeJobStatus, but I think we should
+      # only keep a file for running jobs
+      rm "$tmpDir/job-status-$1" 2>/dev/null
+    fi
+
+    setLock || exit $err # Could that happens?
+    # Calc here not with BYTES but FCOUNT
+    modifyJob "$1" "DONE" "$(( 100 * $i / ${jobData["$1:FCOUNT"]} ))%"
+    unLock
+    exit $err
+  )&
+
+  printf "%(%FT%T)T [Job $1] %s %s\n" "-1" "$cmd" "${jobData["$1:FILES"]}" >> "$tmpDir/job.log"
 fi
 
   cd "$OLDPWD"
@@ -831,74 +901,82 @@ addNewJob() {
     copyOptions="$copyOptions --parents"
   fi
 
-  # Collect some statistics, and because we loop so nice, remove directories
-  # from file list. They would only cause warnings when running cp without -r
-  local target="${1#./}"                  # Remove leading ./ because it looks ugly,
-  target="${target@Q}"                    # I hope it cause no trouble, @Q=Quote arg
-  [[ $target == "''" ]] && target="'.'"   # Keep quotes just for consistency
+  checkTmpDir
+  newJobFiles=$(mktemp --tmpdir="$tmpDir" new-job-files.XXXX)
+  trap "rm $newJobFiles" EXIT
 
-  local -a files=() i="0" bytes="0"
+  local target=$(realpath "$1")
+
   while shift; (( $# ))
   do
     [[ ! -e "$1" ]] && exitError "File not found: $1"
 
     if [[ -d "$1" ]] ; then
       if (( ! optRecursive )) ; then
+        # Remove directories from file list. They would only cause
+        # warnings when running cp without -r
         info "Omit directory: $1\n"
         continue
       else
-        # Works at least with spaces in file names
-        # TODO: Needs to be tested with really crude file names
-        while read s f # Size and Filename, delivered by find below
-        do
-          [[ "${files[*]}" =~ "$f" ]] && continue
-          # echo "Add 2 $f"
-          let bytes+=s
-          files+=("${f#./}")
-          (( i++ ))
-        done <<< $(find $1 -type f -printf "%s %p\n")
+        find "$1" -type f -printf "%s\t%p\n" >> "$newJobFiles"
       fi
-
       continue
     fi
 
-    [[ "${files[*]}" =~ "$1" ]] && continue
-    # echo "Add 1 $1"
-    let bytes+=$(stat -c%s "$1")
-    files+=("${1#./}")
-    (( i++ ))
+    local size=$(stat -c%s "$1")
+    printf "$size\t$1\n" >> "$newJobFiles"
   done
 
-  (( ! ${#files} )) && exitError "No files to copy"
+  [[ -s "$newJobFiles" ]] || exitError "No files to copy"
+  # Don't copy files twice
+  # Remove leading ./ from files, ensure file names match and looks nicer
+  sed -e "s/\t\.\//\t/" "$newJobFiles" | sort | uniq > "$newJobFiles-uniq"
 
-  checkTmpDir
+  mv -f "$newJobFiles-uniq" "$newJobFiles"
+
+  # Collect some statistics
+  local count=$(wc -l "$newJobFiles" | cut -d' ' -f1)
+  # Thanks Dimitre, https://stackoverflow.com/a/3096575
+  local bytes=$(cut -f1 "$newJobFiles" | paste -sd+ | bc)
+
+  # Build small file list only for user hint
+  local files=$(cut -f2 "$newJobFiles" | head -n20 | paste -sd' ')
+  # 200 is arbitrary chosen, long enough to fill one line
+  (( ${#files} > 200 )) && files="${files:0:199}~"
+
   setLock || exitError "Job not added"
-  # FIXME: Would be nice to have a progress info in DONE.
+
   newId=$(nextJobId)
   local total=$(numfmt --to=si $bytes)
+  local bytesPerFile=$(( bytes / count ))
 
-  out "New job: $newId ($i files, $total total)"
+  out "New job: $newId ($count files, $total total, $(numfmt --to=si $bytesPerFile) avg size)"
   out "Target : $target"
-  out "Files  : ${files[*]@Q}"
+  out "Files  : ${files}"
   (( ${#copyOptions} )) && out "Options: $copyOptions"
+
+  mv "$newJobFiles" "$tmpDir/job-files-$newId"
 
   # PRIOrity is associated to STATUS as follows
   # STOPPING RESUME CANCEL running stopped pending done canceled
   #    0        0     0        1      2      3-8     9     9
   addToJobFile "$newId" "PRIO" "5"
   addToJobFile "$newId" "STATUS" "pending"
-  addToJobFile "$newId" "DONE" "?"
+  addToJobFile "$newId" "DONE" "0%"
   printf -v date "%(%FT%T)T" "-1"
   addToJobFile "$newId" "DATE" "$date"
   addToJobFile "$newId" "DRIVE" "$drive"
   addToJobFile "$newId" "HOME" "$PWD"        # Needed, the daemon run in /
   addToJobFile "$newId" "TARGET" "$target"
-  addToJobFile "$newId" "FILES" "${files[*]@Q}"
+  addToJobFile "$newId" "FILES" "$files"
+  addToJobFile "$newId" "FCOUNT" "$count"
   addToJobFile "$newId" "BYTES" "$bytes"
   addToJobFile "$newId" "SIZE" "$total"
   addToJobFile "$newId" "CPYOPT" "$copyOptions -t"
 
   unLock
+
+  trap - EXIT
 
   notifyDaemon
 }
