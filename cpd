@@ -107,26 +107,26 @@ setLock() {
   # Mutex functionality inspired by
   # http://mywiki.wooledge.org/BashFAQ/045
 
-  local i=0
+  local i=0 freeTry=3
 
   while : ;
   do
     if rm "$tmpDir/not-locked" 2>/dev/null
     then
       echo "Locked by pid $$ at $(date -Is)" > "$tmpDir/locked-by"
-      [[ $i -gt 1 ]] && info "OK\n"
+      (( i >= freeTry )) && info "OK\n"
       return 0 # Good!
     else
-      i=$(( i+1 ))
+      (( i++ ))
       # Try some without to print info
-      if (( i > 3 ))
+      if (( i > freeTry ))
         then info "."
-      elif (( i == 3 ))
+      elif (( i == freeTry ))
         then info "Try to lock..."
       fi
 
       sleep $(echo "0.3 + 0.4 * $i" | bc)
-      if [[ $i -eq 7 ]] ; then
+      if (( i == 7 )) ; then
         info "FAIL!\n"
         error "Can't get lock\n$(cat "$tmpDir/locked-by" 2>/dev/null)"
         return 1 # Bad!
