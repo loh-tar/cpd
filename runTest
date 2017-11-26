@@ -11,7 +11,7 @@ else
   echo "Start with clean tmp dir"
   rm -rf $cpdDir/
   mkdir -p $cpdDir/
-  cp ./testData/$type/{jobs,next-id,not-locked} $cpdDir/
+  cp ./testData/$type/{jobs,next-id,not-locked,job-files-*} $cpdDir/
 fi
 
 

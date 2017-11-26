@@ -586,11 +586,6 @@ startJob() {
 
 if (( simulationMode )) ; then
   local cmd2 st=$((($RANDOM % 9) * 2)) # SleepTime
-  case $st in
-    0)  cmd2="echo 'StartERR $1'; SomeWrongComand;" ; ;;
-    2)  cmd2="echo 'ERRORJob $1'; sleep $st; echo 'What ever was wrong' >&2; exit 1;" ; ;;
-    *)  cmd2="echo 'SLEEPJob $1 - ${st}s'; sleep $st;" ; ;;
-  esac
 fi
 
   local cmd="cp${jobData["$1:CPYOPT"]} ${jobData["$1:TARGET"]}"
@@ -604,26 +599,48 @@ fi
   (( simulationMode && st != 4 )) && jobHome="$HOME"
 
   if ! cd "$jobHome" 2>/dev/null ; then
-    error "Job home is gone: ${jobData["$1:HOME"]}" 2>$tmpDir/error.log-job-$1
+    error "Job home is gone: ${jobData["$1:HOME"]}" 2>"$tmpDir/error.log-job-$1"
     changeStatus "$1" "NOSTART"
     procInfo "$1" "StartERR"
     return
   fi
 
-if (( simulationMode )) ; then
-  (eval "$cmd2" > $tmpDir/msg.log-job-$1 2>$tmpDir/error.log-job-$1)&
-  printf "%(%FT%T)T [Job $1]\nFake Job: %s\nTrue Job: %s\n\n" "-1" "$cmd2" "$cmd" >> "$tmpDir/job.log"
-else
+
   (
     local err="0" i="0"
 
     if (( optNoProgress  )) ; then
+    # FIXME: This solution with xargs call for each file cp,
+    # but I think it should only do one call with all files
+
+if (( simulationMode )) ; then
+      case $st in
+        0)  cmd2='echo "StartERR $1"; SomeWrongComand;' ; ;;
+        2)  cmd2='echo "ERRORJob $1"; sleep ${st}; echo "What ever was wrong" >&2; exit 1;' ; ;;
+        *)  cmd2='echo "SLEEPJob $1 - ${st}s with file: xfile"; sleep ${st};' ; ;;
+      esac
+
+      # FIXME: I didn't got it all together working simply by cmd=cmd2
+      # So make a special treatment for each simulation type, not so nice
+      cmd2=${cmd2/\$1/$1}
+      cmd2=${cmd2//\$\{st\}/$st}
+      cut -f2- "$tmpDir/job-files-$1" | tr '\n' '\000' | xargs -0 -I xfile  \
+        bash -c "eval  $cmd2" >"$tmpDir/msg.log-job-$1" 2>"$tmpDir/error.log-job-$1"
+
+      # FIXME:Should run together with xargs line
+      printf "%(%FT%T)T [Job $1]\nFake Job: %s\nTrue Job: %s %s\n\n" "-1" \
+        "$cmd2" "$cmd" "${jobData["$1:FILES"]}" >> "$tmpDir/job.log"
+else
       # Reading file names is tricky, discard size and convert to zero terminated
       # list to ensure spaces are properly handled
       cut -f2- "$tmpDir/job-files-$1" | tr '\n' '\000' | xargs -0   \
         cp ${jobData["$1:CPYOPT"]} "${jobData["$1:TARGET"]}"        \
           > "$tmpDir/msg.log-job-$1" 2>"$tmpDir/error.log-job-$1"
 
+      # FIXME:Should run together with the xargs line
+      printf "%(%FT%T)T [Job $1] %s %s\n" "-1" "$cmd" "${jobData["$1:FILES"]}" \
+        >> "$tmpDir/job.log"
+fi
       err="$?"
       i="${jobData["$1:FCOUNT"]}"
 
@@ -641,8 +658,32 @@ else
       while read size file
       do
         (( i++ ))
+
+if (( simulationMode )) ; then
+        # Using logarithm of file size as sleep time
+        # https://stackoverflow.com/a/7962297
+        st=$(echo "scale=2; l($size)/l(4)" | bc -l)
+
+        case "$(($RANDOM % 9))" in
+          0)  cmd2='echo "ERRORJob $1"; sleep ${st}; echo "What ever was wrong" >&2; exit 1;' ; ;;
+          *)  cmd2='echo "SLEEPJob $1 - ${st}s with file: ($size) $file"; sleep ${st};' ; ;;
+        esac
+
+        cmd2=${cmd2/\$1/$1}
+        cmd2=${cmd2//\$\{st\}/$st}
+        cmd2=${cmd2/\$size/$size}
+        cmd2=${cmd2/\$file/$file}
+        printf "%(%FT%T)T [Job $1]\nFake Job: %s\nTrue Job: %s %s\n\n" "-1" \
+          "$cmd2" "$cmd" "$file" >> "$tmpDir/job.log"
+
+       (eval $cmd2 >> "$tmpDir/msg.log-job-$1" 2>>"$tmpDir/error.log-job-$1")
+else
+        printf "%(%FT%T)T [Job $1] %s %s\n" "-1" "$cmd" "$file"       \
+          >> "$tmpDir/job.log"
+
         cp ${jobData["$1:CPYOPT"]} "${jobData["$1:TARGET"]}" "$file"  \
           >> "$tmpDir/msg.log-job-$1" 2>>"$tmpDir/error.log-job-$1"
+fi
 
         if (( $? )) ; then
           err="1"
@@ -656,6 +697,7 @@ else
             SECONDS="0"
           fi
         fi
+
       done < "$tmpDir/job-files-$1"
       # Instead of rm we could finally writeJobStatus, but I think we should
       # only keep a file for running jobs
@@ -664,13 +706,12 @@ else
 
     setLock || exit $err # Could that happens?
     # Calc here not with BYTES but FCOUNT
+
     modifyJob "$1" "DONE" "$(( 100 * $i / ${jobData["$1:FCOUNT"]} ))%"
     unLock
     exit $err
   )&
 
-  printf "%(%FT%T)T [Job $1] %s %s\n" "-1" "$cmd" "${jobData["$1:FILES"]}" >> "$tmpDir/job.log"
-fi
 
   cd "$OLDPWD"
   jobPids[$1]="$!"
