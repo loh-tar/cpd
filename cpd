@@ -20,7 +20,7 @@
 #   MA 02110-1301, USA.
 
 declare -r me=$(basename "$0")
-declare -r version="0.1pre3"
+declare -r version="0.1pre4"
 declare -r vDate="Nov 2017"
 declare -r simulationMode="1"
 declare    optRecursive="0"
@@ -539,13 +539,13 @@ cmdDaemonize() {
     status)
       if getDaemonPid ; then
         out "Daemon is running with pid $daemonPID"
-        cat "$tmpDir/processStatus" | cut -c-$screenWidth
+        cut -c-$screenWidth "$tmpDir/processStatus" 2>/dev/null
         # Thanks to Daniel
         # https://unix.stackexchange.com/a/325581
         if compgen -G "$tmpDir/job-status-*" > /dev/null; then
           out ""
           out "Running jobs:"
-          cat "$tmpDir"/job-status-* | cut -c-$screenWidth
+          cut -c-$screenWidth "$tmpDir"/job-status-* 2>/dev/null
         fi
       else
         out "No running daemon"
