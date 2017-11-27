@@ -3,6 +3,11 @@
 type=${1:-"small"}
 cpdDir="/tmp/cpd/user-$(id -un)"
 
+if ! cpd -D|grep -q "Hint: Simulation" ; then
+  echo "No active simulation mode - no testing"
+  exit 1
+fi
+
 if [[ -f $cpdDir/daemon-pid ]] ; then
   echo "There is a running daemon"
   echo "Will not destroy tmp dir"

@@ -395,6 +395,7 @@ cmdTidy() {
 
 cmdProcess() {
   notifyDaemon && exitGood "Daemon already running with pid $daemonPID is triggered to do the job"
+  (( simulationMode )) && info "${txtBold}Hint: ${txtClean}Running in simulation mode, nothing will copied\n"
 
   cd "$tmpDir"
   set -o monitor
@@ -444,6 +445,7 @@ cmdDaemonize() {
           exec 0</dev/null
 
           printf "%(%FT%T)T cpd daemon started with pid $$\n" "-1"
+          (( simulationMode )) && printf "*\n* Running in simulation mode, nothing will copied\n*\n"
 
           # Mike suggest to run a daemon in / but I think that should be ok
           cd "$tmpDir"
@@ -492,6 +494,7 @@ cmdDaemonize() {
           $meFullPath -D start DAEMON  >/dev/null 2>/dev/null </dev/null &
           # FIXME: Print to tty like Mike, No \n, for now
           info "cpd daemon started with pid $!"
+          (( simulationMode )) && info "\n${txtBold}Hint: ${txtClean}Running in simulation mode, nothing will copied"
           exit 0
         ;;
 
@@ -539,6 +542,7 @@ cmdDaemonize() {
     status)
       if getDaemonPid ; then
         out "Daemon is running with pid $daemonPID"
+        (( simulationMode )) && out "${txtBold}Hint: ${txtClean}Running in simulation mode, nothing will copied"
         cut -c-$screenWidth "$tmpDir/processStatus" 2>/dev/null
         # Thanks to Daniel
         # https://unix.stackexchange.com/a/325581
@@ -549,6 +553,7 @@ cmdDaemonize() {
         fi
       else
         out "No running daemon"
+        (( simulationMode )) && out "${txtBold}Hint: ${txtClean}Simulation mode is active, nothing will copied"
       fi
 
       if [[ -s "$jobFile" ]] ; then
