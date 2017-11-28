@@ -27,6 +27,7 @@ declare    optRecursive="0"
 declare    optMerge="0"
 declare    optNoProgress="0"
 declare    optExtraCopy=""
+declare    optSourceList=""
 
 declare -r tmpDir="/tmp/$me/user-$(id -un)"
 declare -r jobFile="$tmpDir/jobs"               # All jobs as key/value
@@ -976,8 +977,11 @@ addNewJob() {
     printf "$size\t$1\n" >> "$newJobFiles"
   }
   if (( $# )) ; then
+    # Read arguments from command line
     for file        ; do addSourceFile "$file"; done
   else
+    # Read from file, when given, otherwise from stdin
+    (( ${#optSourceList} )) && exec <"$optSourceList"
     while read file ; do addSourceFile "$file"; done
   fi
   # <<< FIXME:Get rid of this...
@@ -1071,6 +1075,7 @@ do
         out "  (2nd) $me <command> [<argument>...]"
         out ""
         out "${txtBold}Options are:${txtClean}"
+        out "  -f <file>          Read list of source files from <file>, ignored when <source> is given"
         out "  -o <cp-opt>        Add <cp-opt> to the called cp command"
         out "  -R                 Copy recursive"
         out "  -m                 Merge all files in <dest-dir>"
@@ -1119,12 +1124,14 @@ do
 done
 
 OPTIND="1"
-while getopts ?C:Dlmo:p:PRr:s:T opt
+while getopts ?C:Df:lmo:p:PRr:s:T opt
 do
 
   case $opt in
     C)  cmdCancel $OPTARG         ; exit ; ;;
     D)  cmdDaemonize $@           ; exit ; ;;
+    f)  [[ -f "$OPTARG" ]] || exitError "File not found: $OPTARG"
+        optSourceList="$OPTARG"          ; ;;
     l)  shift $(( $OPTIND - 1 ))
         cmdList $1                ; exit ; ;;
     m)  optMerge="1"                     ; ;;
