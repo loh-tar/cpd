@@ -25,7 +25,7 @@ To change this edit in the source the setting of "simulationMode" from "1" to "0
     -l [c]             List jobs, c=i by ID, or errors c=e
     -o <cp-opt>        Add <cp-opt> to the called cp command
     -P                 Process jobs or trigger daemon to continue
-    -p <job-id> <prio> Change job priority 3-8
+    -p <job-id> <prio> Change job priority 3-7
     -R                 Copy recursive
     -r <job-id>        Resume a job
     -s <job-id>        Stop a job
