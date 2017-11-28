@@ -12,8 +12,15 @@ To change this edit in the source the setting of "simulationMode" from "1" to "0
 
 ### Usage
 
-    cpd [-o <cp-opt>][-R] <dest-dir> <source>...
-    cpd <command> [<argument>...]
+    (1st) cpd [<option>...] <dest-dir> [<source>...]
+    (2nd) cpd <command> [<argument>...]
+
+### Options are:
+
+    -f <file>          Read list of source files from <file>, ignored when <source> is given
+    -o <cp-opt>        Add <cp-opt> to the called cp command
+    -R                 Copy recursive
+    -m                 Merge all files in <dest-dir>
 
 ### Commands are:
 
@@ -22,11 +29,9 @@ To change this edit in the source the setting of "simulationMode" from "1" to "0
                        <action> can be +|-|start|stop
     -h [c]             Show this help or when c=l License, c=s Source of cpd
     -H                 Show more help
-    -l [c]             List jobs, c=i by ID, or errors c=e
-    -o <cp-opt>        Add <cp-opt> to the called cp command
+    -l [c]             List jobs, c=i by ID, or errors c=e, or the job log c=l
     -P                 Process jobs or trigger daemon to continue
     -p <job-id> <prio> Change job priority 3-7
-    -R                 Copy recursive
     -r <job-id>        Resume a job
     -s <job-id>        Stop a job
     -T                 Tidy up all job data

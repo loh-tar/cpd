@@ -20,7 +20,7 @@
 #   MA 02110-1301, USA.
 
 declare -r me=$(basename "$0")
-declare -r version="0.1pre4"
+declare -r version="0.1pre5"
 declare -r vDate="Nov 2017"
 declare -r simulationMode="1"
 declare    optRecursive="0"
