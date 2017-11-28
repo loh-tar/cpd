@@ -920,6 +920,8 @@ addNewJob() {
     drive=${drive%%[0-9]*}                # Drive only matters, not partition
   fi
 
+  local target=$(realpath "$1") ; shift
+
   # Examine optExtraCopy
   # Remove, we do it: -R, -r, --recursive
   # Not allowed: -i, --interactive, -T, --no-target-directory --help --version
@@ -954,10 +956,8 @@ addNewJob() {
   newJobFiles=$(mktemp --tmpdir="$tmpDir" new-job-files.XXXX)
   trap "rm $newJobFiles" EXIT
 
-  local target=$(realpath "$1")
-
-  while shift; (( $# ))
-  do
+  # FIXME:Get rid of this ugly construct and do it somehow in one loop >>>
+  addSourceFile() {
     [[ ! -e "$1" ]] && exitError "File not found: $1"
 
     if [[ -d "$1" ]] ; then
@@ -965,16 +965,22 @@ addNewJob() {
         # Remove directories from file list. They would only cause
         # warnings when running cp without -r
         info "Omit directory: $1\n"
-        continue
+        return
       else
         find "$1" -type f -printf "%s\t%p\n" >> "$newJobFiles"
       fi
-      continue
+      return
     fi
 
     local size=$(stat -c%s "$1")
     printf "$size\t$1\n" >> "$newJobFiles"
-  done
+  }
+  if (( $# )) ; then
+    for file        ; do addSourceFile "$file"; done
+  else
+    while read file ; do addSourceFile "$file"; done
+  fi
+  # <<< FIXME:Get rid of this...
 
   [[ -s "$newJobFiles" ]] || exitError "No files to copy"
   # Don't copy files twice
@@ -1061,7 +1067,7 @@ do
         out ""
         fi
         out "${txtBold}Usage:${txtClean}"
-        out "  (1st) $me [<option>...] <dest-dir> <source>..."
+        out "  (1st) $me [<option>...] <dest-dir> [<source>...]"
         out "  (2nd) $me <command> [<argument>...]"
         out ""
         out "${txtBold}Options are:${txtClean}"
@@ -1090,7 +1096,7 @@ do
         if [[ $opt == "H" ]] ; then
         out ""
         out "${txtBold}Notes:${txtClean}"
-        out "  • The first form schedule a new copy task"
+        out "  • The first form schedule a new copy task. When <source> is omitted, will read from stdin"
         out "  • The second form list or change tasks"
         out "  • The job priority is not static and affect only the start time. Highest priority is 0"
         out "  • The executed copy command will be 'cp <cp-opt> --parents -t <dest-dir> <source>'"
