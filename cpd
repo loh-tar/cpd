@@ -669,6 +669,7 @@ if (( simulationMode )) ; then
         # Using logarithm of file size as sleep time
         # https://stackoverflow.com/a/7962297
         st=$(echo "scale=2; l($size)/l(4)" | bc -l)
+        (( size )) || st="1" # When size is 0, log is negative, and then grumble sleep
 
         case "$(($RANDOM % 9))" in
           0)  cmd2='echo "ERRORJob $1"; sleep ${st}; echo "What ever was wrong" >&2; exit 1;' ; ;;
