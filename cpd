@@ -592,19 +592,18 @@ startJob() {
   procInfo "$1" "Start"
   arg=${jobData["$1:FILES"]}
 
-if (( simulationMode )) ; then
-  local cmd2 st=$((($RANDOM % 9) * 2)) # SleepTime
-fi
-
   local cmd="cp${jobData["$1:CPYOPT"]} ${jobData["$1:TARGET"]}"
 
   changeStatus "$1" "starting"
 
   local jobHome="${jobData["$1:HOME"]}"
 
+if (( simulationMode )) ; then
+  local cmd2 st=$((($RANDOM % 9) * 2)) # SleepTime
   # Assume we have only wrong HOME settings in our test data,
   # force an error when sleep time is 4
-  (( simulationMode && st != 4 )) && jobHome="$HOME"
+  (( st != 4 )) && jobHome="$HOME"
+fi
 
   if ! cd "$jobHome" 2>/dev/null ; then
     error "Job home is gone: ${jobData["$1:HOME"]}" 2>"$tmpDir/error.log-job-$1"
