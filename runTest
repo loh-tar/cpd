@@ -3,7 +3,7 @@
 type=${1:-"small"}
 cpdDir="/tmp/cpd/user-$(id -un)"
 
-if ! ./cpd -D|grep -q "Simulation mode" ; then
+if ! ./cpd status|grep -q "Simulation mode" ; then
   echo "No active simulation mode - no testing"
   exit 1
 fi
@@ -21,21 +21,21 @@ fi
 
 
 ( sleep 1
-  ./cpd -s 4 >/dev/null 2>&1
-  ./cpd -C 5 >/dev/null 2>&1
-  ./cpd -C 6 >/dev/null 2>&1
+  ./cpd s 4 >/dev/null 2>&1
+  ./cpd K 5 >/dev/null 2>&1
+  ./cpd K 6 >/dev/null 2>&1
   sleep 2
- ./cpd -r 4 >/dev/null 2>&1
+  ./cpd r 4 >/dev/null 2>&1
 )& >/dev/null 2>&1
 
 echo
-echo "Run: cpd -l"
-./cpd -l
+echo "Run: cpd l"
+./cpd l
 
 echo
-echo "Run: cpd -P"
-./cpd -P
+echo "Run: cpd P"
+./cpd P
 
 echo
-echo "Run cpd -le"
-./cpd -le
+echo "Run cpd l e"
+./cpd l e

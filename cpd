@@ -20,8 +20,8 @@
 #   MA 02110-1301, USA.
 
 declare -r me=$(basename "$0")
-declare -r version="0.1pre5"
-declare -r vDate="Nov 2017"
+declare -r version="0.1pre6"
+declare -r vDate="Dez 2017"
 declare -r simulationMode="1"
 declare    optRecursive="0"
 declare    optMerge="0"
@@ -231,6 +231,99 @@ cutLeft() {
 #
 # Command Implementations
 #
+cmdHelp() {
+  case $1 in
+    l)  out ""
+        # Adjust -B4 in case of copyright changes
+        grep -B4 -A13 -m1 "This program is free software" "$0" | cut -b2-
+        out ""
+    ;;
+    s)  less "$0"
+    ;;
+    *)  if [[ $1 == "H" ]] ; then
+        out "This is ${txtBold}cpd${txtClean} - The copy daemon (v$version, $vDate)"
+        out ""
+        fi
+        out "${txtBold}Usage:${txtClean}"
+        out "  $me [option>...] <command> [<argument>...]"
+#         out "  $me [option>...] newjob <source> <destination>"      # TODO
+#         out "  $me [option>...] newjob <source>... <dest-dir>"      # TODO
+        out "  $me [option>...] newjob <dest-dir> <source>..."        # DELETE
+#         out "  $me [option>...] newjob -t <dest-dir> <source>..."   # TODO
+        out "  $me [option>...] newjob <dest-dir>                   # Read list of sources from stdin"
+        out "  $me [option>...] newjob -f <file> <dest-dir>"
+#         [[ $1 == "H" ]] && out ""
+#         out "${txtBold}Main Options:${txtClean}"
+#         out "  -s                       Run only a simulation, copy nothing" # TODO
+#         out "  -v                       Be verbose" # TODO
+#         out "  -q                       Be almost quiet" # TODO
+        [[ $1 == "H" ]] && out ""
+        out "${txtBold}New Job Options:${txtClean}"
+        out "  -f <file>                Read list of source files from <file>"
+        out "  -m                       Merge all files in <dest-dir>"
+        out "  -o <cp-opt>              Add <cp-opt> to the called cp command"
+#         out "  -p <user-prio>           Enqueue job with modified default priority. PRIO=6-<user-prio>" # TODO
+        out "  -r                       Copy recursive"
+        [[ $1 == "H" ]] && out ""
+        out "${txtBold}Commands:${txtClean}"
+        if [[ $1 == "h" ]] ; then
+        out "  h, help [c]              Show this help or when c=l License, c=s Source of ${txtBold}$me${txtClean}"
+        out "  H                        Show more help"
+#         out "  o, option o[-|<arg>]     Set an option for further use until unset by o- (o an option letter without hyphen)" # TODO
+        else
+        out "  h, help [c]              Show less help or when c=l License, c=s Source of ${txtBold}$me${txtClean}"
+        out "  H                        Show this help"
+        out "     newjob <arguments>    Enqueue a new job with arguments as shown above"
+        out "     start                 Start the daemon and job processing"
+        out "  x, exit                  Terminate the daemon and job processing"
+        out "  P, process               Process jobs in foreground or trigger daemon to continue"
+#         out "  P, process               Process jobs in foreground" TODO
+        fi
+#         out "  w, show [c]              Show jobs, c=i by ID, or errors c=e, or job log c=l, daemon status c=s" # TODO
+        out "     status                Print status of the daemon and job processing" # DELETE
+        out "  l, list [c]              List jobs, c=i by ID, or errors c=e, or the job log c=l" # DELETE
+        out "  K, kill <job-id>         Cancel a pending or kill a running job" # DELETE
+#         out "  k, kill <job>...       Cancel a pending or kill a running job" # TODO
+        out "  p, prio <job-id> <prio>  Change job priority 3-7" # DELETE
+#         out "  c, prio <prio> <job>...  Change job priority 3-7 or delta if +-<prio>" # TODO
+        out "  r, resume <job-id>       Resume a job" # DELETE
+#         out "  r, resume <job>...       Resume a job" # TODO
+        out "  s, stop <job-id>         Stop a job" # DELETE
+#         out "  s, stop <job>...         Stop a job" # TODO
+        out "  Y, tidy                  Tidy up all job data"
+#         out "  -t                 Tidy up done jobs (TODO)"
+        if [[ $1 == "H" ]] ; then
+        out ""
+        out "${txtBold}Notes:${txtClean}"
+#         out "  • Calling cpd with any other name than ${txtBold}cpd${txtClean} forces to run as if ${txtBold}newjob${txtClean} was given" # TODO
+        out "  • The ${txtBold}<command>${txtClean} is lazy recognized by any parts of its long name"
+        out "  • The job priority is not static. Lower numbers have a higher priority"
+        out "    Jobs started in order of priority and enqueue time. 0-2(active), 8+9(old) are intern used"
+#         out "    New jobs have prio 6 unless -p was given"
+        out "    New jobs have prio 6 unless"
+        out "  • ${txtBold}exit${txtClean} stops job processing, if so, or stops the daemon at all, if not"
+        out "    Adding a new job trigger the daemon to continue job processing, there is no blocking"
+        out "  • ${txtBold}tidy${txtClean} does nothing else than 'rm -rf $tmpDir'"
+#         out "  • ${txtBold}-R,-m${txtClean} are ignored when ${txtBold}-o${txtClean} is present" # TODO
+        out "  • Enclose ${txtBold}<cp-opt>${txtClean} in quotes if you need more than one option"
+#         out ""
+#         out "${txtBold}Examples:${txtClean}"
+#         out "  Enqueue new copy task, assumed you have a symlink cpc->cpd" # TODO
+#         out "    cpc -p1  /media/1a/foo *                       # New job with higher PRIO=5"
+#         out "    cpc /media/1c/foo < /path/to/list-of-files"
+#         out "    find * -type f -print | cpc -p2 /media/1d/foo"
+#         out ""
+#         out "  Take a look how it is going"
+#         out "    watch -n1 cpd list"
+#         out "    watch -n1 cpd status"
+#         out "    watch -n1 cpd w"
+#         out "    watch -n1 cpd w s"
+#         out ""
+        fi
+    ;;
+  esac
+}
+
 outJobLine() {
   local id="$1"
   local format="$2"
@@ -329,7 +422,7 @@ notifyDaemon() {
   fi
 }
 
-cmdCancel() {
+cmdKill() {
   # Need parms: id
   checkJobId "$1"
 
@@ -397,9 +490,10 @@ cmdTidy() {
 }
 
 cmdProcess() {
-  notifyDaemon && exitGood "Daemon already running with pid $daemonPID is triggered to do the job"
+  notifyDaemon && exitGood "Running daemon with pid $daemonPID is triggered to do the job"
   (( simulationMode )) && info "${txtBold}Hint: ${txtClean}Running in simulation mode, nothing will copied\n"
 
+  checkTmpDir
   cd "$tmpDir"
   set -o monitor
   trap "recheckJobList=1" USR1 2>/dev/null
@@ -425,162 +519,137 @@ cmdProcess() {
   fi
 }
 
-cmdDaemonize() {
-  case $1 in
-    -D-) shift; set -- "stop"   ; ;;
-    -D+) shift; set -- "start"  ; ;;
-      *) shift; ;;
-  esac
+cmdStartDaemon() {
+  # Thanks to Mike S
+  # https://stackoverflow.com/a/29107686
+  local meFullPath=$(which ${BASH_SOURCE[0]})
 
-  (( $# )) ||  set -- "status"
+  case "$1" in
+    DAEMON) # 3. doomed
+      checkTmpDir
+      exec >"$tmpDir/daemon-out.log"
+      exec 2>"$tmpDir/daemon-error.log"
+      exec 0</dev/null
 
-  case $1 in
-    start|+)
-      # Thanks to Mike S
-      # https://stackoverflow.com/a/29107686
-      local meFullPath=$(which ${BASH_SOURCE[0]})
+      printf "%(%FT%T)T cpd daemon started with pid $$\n" "-1"
+      (( simulationMode )) && printf "*\n* Running in simulation mode, nothing will copied\n*\n"
 
-      case $2 in
-        DAEMON) # 3. doomed
-          checkTmpDir
-          exec >"$tmpDir/daemon-out.log"
-          exec 2>"$tmpDir/daemon-error.log"
-          exec 0</dev/null
+      # Mike suggest to run a daemon in / but I think that should be ok
+      cd "$tmpDir"
 
-          printf "%(%FT%T)T cpd daemon started with pid $$\n" "-1"
-          (( simulationMode )) && printf "*\n* Running in simulation mode, nothing will copied\n*\n"
+      # FIXME: This part is almost a copy of cmdProcess,
+      # split it into parts/functions to reduce redundancy
+      set -o monitor
+      trap "recheckJobList=1" USR1 2>/dev/null
+      trap "stopRunning=1; info '${clearLine}Received signal to stop, will wait for running jobs\n'" USR2 2>/dev/null
+      trap checkChilds CHLD
+      echo "$$" > "$tmpDir/daemon-pid"
+      recheckJobList="1"
 
-          # Mike suggest to run a daemon in / but I think that should be ok
-          cd "$tmpDir"
-
-          # FIXME: This part is almost a copy of cmdProcess,
-          # split it into parts/functions to reduce redundancy
-          set -o monitor
-          trap "recheckJobList=1" USR1 2>/dev/null
-          trap "stopRunning=1; info '${clearLine}Received signal to stop, will wait for running jobs\n'" USR2 2>/dev/null
-          trap checkChilds CHLD
-          echo "$$" > "$tmpDir/daemon-pid"
-          recheckJobList="1"
-
-          # FIXME: Improve sleep state and communication with daemon.
-          # Read from socket or something instead only to trigger/trap and
-          # running pointless every a view seconds only to catch the trap.
-          # Or perhaps by kill -STOP yourself someway
-          local i="0"
-          while (( ! stopRunning && i < 60 )) # Finish after ~10min, see sleep 10
-          do
-
-            while (( recheckJobList ))
-            do
-              (( ! ${#jobPids[*]} && stopRunning )) && break
-              printf "%(%FT%T)T Go to work\n" "-1"
-              processJobList
-              i="0"
-            done
-
-            stopRunning="0"
-            recheckJobList="0"
-            printf "%(%FT%T)T Sleep\n" "-1"
-            sleep 10 # Don't sleep to long, but long enough not to bother
-            printf "%(%FT%T)T Wakeup\n" "-1"
-            (( i++ ))
-          done
-
-          printf "%(%FT%T)T Exit with pid $$\n" "-1"
-          rm "$tmpDir/daemon-pid"
-          exit 0
-        ;;
-
-        BANISHMENT) # 2. child
-          # umask 0 # Mike does this, but for now we don't want a daemon running
-                    # as an other user than the caller (?)
-          $meFullPath -D start DAEMON  >/dev/null 2>/dev/null </dev/null &
-          # FIXME: Print to tty like Mike, No \n, for now
-          info "cpd daemon started with pid $!"
-          (( simulationMode )) && info "\n${txtBold}Hint: ${txtClean}Running in simulation mode, nothing will copied"
-          exit 0
-        ;;
-
-        *) # 1. entry point
-          getDaemonPid && { info "Daemon is already running with pid $daemonPID\n"; exit 0; }
-          setsid $meFullPath -D start BANISHMENT  &
-        ;;
-      esac
-      exit 0
-    ;;
-
-    *) # FIXME: This cause error "stty: 'standard input': Inappropriate ioctl for device"
-       #        when going to daemon mode. That's why we do it now
-      setScreenWidth
-    ;;&
-
-    stop|-)
-      getDaemonPid || exitGood "No running daemon to stop"
-      kill -USR2 "$daemonPID"
-
-      # Let's do some fancy stuff
-      local  x=("-" "\\" "|" "/")  i="0"
-      while [[ -f "$tmpDir/daemon-pid" ]] && (( i < 30 ))
+      # FIXME: Improve sleep state and communication with daemon.
+      # Read from socket or something instead only to trigger/trap and
+      # running pointless every a view seconds only to catch the trap.
+      # Or perhaps by kill -STOP yourself someway
+      local i="0"
+      while (( ! stopRunning && i < 60 )) # Finish after ~10min, see sleep 10
       do
-        # local txt=<("$tmpDir/processStatus")      # Not working, something locked
-        # local txt=$(cat "$tmpDir/processStatus")  # Works
-        # FIXME: Print three lines info text and hourglass (fix at processJobList too)
-        #        and wait until key pressed
-        # info "\r%s Wait for daemon with pid $daemonPID to stop %s" "${x[((i++ % 4))]}" "$txt"
-        # info "$oneLineUp\r$clearLine%s  %s\nWait for daemon with pid $daemonPID to stop %s" "${x[((i++ % 4))]}" "$txt"
-        info "\r%s Wait for daemon with pid $daemonPID to stop " "${x[((i++ % 4))]}"
-        sleep 0.3;
+
+        while (( recheckJobList ))
+        do
+          (( ! ${#jobPids[*]} && stopRunning )) && break
+          printf "%(%FT%T)T Go to work\n" "-1"
+          processJobList
+          i="0"
+        done
+
+        stopRunning="0"
+        recheckJobList="0"
+        printf "%(%FT%T)T Sleep\n" "-1"
+        sleep 10 # Don't sleep to long, but long enough not to bother
+        printf "%(%FT%T)T Wakeup\n" "-1"
+        (( i++ ))
       done
 
-      if [[ -f "$tmpDir/daemon-pid" ]] ; then
-        info " - is still running\n"
-        cat "$tmpDir/processStatus" | cut -c-$screenWidth
-        exit 1
-      else
-        info " - OK\n"
-        exit 0
-      fi
+      printf "%(%FT%T)T Exit with pid $$\n" "-1"
+      rm "$tmpDir/daemon-pid"
     ;;
 
-    status)
-      if getDaemonPid ; then
-        out "Daemon is running with pid $daemonPID"
-        (( simulationMode )) && out "${txtBold}Hint: ${txtClean}Running in simulation mode, nothing will copied"
-        cut -c-$screenWidth "$tmpDir/processStatus" 2>/dev/null
-        # Thanks to Daniel
-        # https://unix.stackexchange.com/a/325581
-        if compgen -G "$tmpDir/job-status-*" > /dev/null; then
-          out ""
-          out "Running jobs:"
-          cut -c-$screenWidth "$tmpDir"/job-status-* 2>/dev/null
-        fi
-      else
-        out "No running daemon"
-        (( simulationMode )) && out "${txtBold}Hint: ${txtClean}Simulation mode is active, nothing will copied"
-      fi
-
-      if [[ -s "$jobFile" ]] ; then
-        out "\nJobs by status:"
-        for s in "Pending" "Done" "Canceled" "Killed" "Error"
-        do
-          local jobCount=$(grep -i "STATUS:$s" "$tmpDir/jobs" | wc -l)
-          (( jobCount )) || continue
-          local -a jobs=($(grep -i "STATUS:$s" "$tmpDir/jobs" | cut -d: -f1))
-          printf -v txt "  %-8s %5s: %s" "$s" "($jobCount)" "${jobs[*]}"
-          out "$txt"
-        done
-      else
-        out "\nNo jobs"
-      fi
-
-      exit 0
+    BANISHMENT) # 2. child
+      # umask 0 # Mike does this, but for now we don't want a daemon running
+                # as an other user than the caller (?)
+      $meFullPath start DAEMON  >/dev/null 2>/dev/null </dev/null &
+      # FIXME: Print to tty like Mike, No \n, for now
+      info "cpd daemon started with pid $!"
+      (( simulationMode )) && info "\n${txtBold}Hint: ${txtClean}Running in simulation mode, nothing will copied"
     ;;
 
-    *)
-      exitError "What is '$1'? Try '$me -h' for help"
+    *) # 1. entry point
+      getDaemonPid && { info "Daemon is already running with pid $daemonPID\n"; exit 0; }
+      setsid $meFullPath start BANISHMENT  &
     ;;
-
   esac
+}
+
+cmdExit() {
+  getDaemonPid || exitGood "No running daemon to stop"
+  kill -USR2 "$daemonPID"
+  setScreenWidth
+  # Let's do some fancy stuff
+  local  x=("-" "\\" "|" "/")  i="0"
+  while [[ -f "$tmpDir/daemon-pid" ]] && (( i < 30 ))
+  do
+    # local txt=<("$tmpDir/processStatus")      # Not working, something locked
+    # local txt=$(cat "$tmpDir/processStatus")  # Works
+    # FIXME: Print three lines info text and hourglass (fix at processJobList too)
+    #        and wait until key pressed
+    # info "\r%s Wait for daemon with pid $daemonPID to stop %s" "${x[((i++ % 4))]}" "$txt"
+    # info "$oneLineUp\r$clearLine%s  %s\nWait for daemon with pid $daemonPID to stop %s" "${x[((i++ % 4))]}" "$txt"
+    info "\r%s Wait for daemon with pid $daemonPID to stop " "${x[((i++ % 4))]}"
+    sleep 0.3;
+  done
+
+  if [[ -f "$tmpDir/daemon-pid" ]] ; then
+    info " - is still running\n"
+    cut "-c-$screenWidth" "$tmpDir/processStatus" 2>/dev/null
+    exit 1
+  else
+    info " - OK\n"
+    exit 0
+  fi
+}
+
+cmdStatus() {
+  setScreenWidth
+
+  if getDaemonPid ; then
+    out "Daemon is running with pid $daemonPID"
+    (( simulationMode )) && out "${txtBold}Hint: ${txtClean}Running in simulation mode, nothing will copied"
+    cut "-c-$screenWidth" "$tmpDir/processStatus" 2>/dev/null
+    # Thanks to Daniel
+    # https://unix.stackexchange.com/a/325581
+    if compgen -G "$tmpDir/job-status-*" > /dev/null; then
+      out ""
+      out "Running jobs:"
+      cut "-c-$screenWidth" "$tmpDir"/job-status-* 2>/dev/null
+    fi
+  else
+    out "No running daemon"
+    (( simulationMode )) && out "${txtBold}Hint: ${txtClean}Simulation mode is active, nothing will copied"
+  fi
+
+  if [[ -s "$jobFile" ]] ; then
+    out "\nJobs by status:"
+    for s in "Pending" "Done" "Canceled" "Killed" "Error"
+    do
+      local jobCount=$(grep -i "STATUS:$s" "$tmpDir/jobs" | wc -l)
+      (( jobCount )) || continue
+      local -a jobs=($(grep -i "STATUS:$s" "$tmpDir/jobs" | cut -d: -f1))
+      printf -v txt "  %-8s %5s: %s" "$s" "($jobCount)" "${jobs[*]}"
+      out "$txt"
+    done
+  else
+    out "\nNo jobs"
+  fi
 }
 
 #
@@ -909,7 +978,9 @@ processJobList() {
   info "$clearLine"
 }
 
-addNewJob() {
+cmdNewJob() {
+  [[ -d "$1" ]] || exitError "Destination must be a directory"
+
   # Get the destination drive
   # FIXME: As long we have plain drives all is nice, but with mappers, raid or
   # what ever other hell, I think there is now way to get the real drive(?)
@@ -1019,9 +1090,9 @@ addNewJob() {
   mv "$newJobFiles" "$tmpDir/job-files-$newId"
 
   # PRIOrity is associated to STATUS as follows
-  # STOPPING RESUME CANCEL running stopped pending done canceled
-  #    0        0     0        1      2      3-8     9     9
-  addToJobFile "$newId" "PRIO" "5"
+  # STOPPING RESUME CANCEL running stopped pending error/kill/canceled done
+  #    0        0     0        1      2      3-7           8             9
+  addToJobFile "$newId" "PRIO" "6"
   addToJobFile "$newId" "STATUS" "pending"
   addToJobFile "$newId" "DONE" "0%"
   printf -v date "%(%FT%T)T" "-1"
@@ -1058,93 +1129,19 @@ do
     *)  continue; ;;
   esac
 
-  case $opt in
-    l)  out ""
-        # Adjust -B4 in case of copyright changes
-        grep -B4 -A13 -m1 "This program is free software" "$0" | cut -b2-
-        out ""
-        exit ; ;;
-
-    s)  less "$0"
-        exit ; ;;
-
-    *)  if [[ $opt == "H" ]] ; then
-        out "This is ${txtBold}cpd${txtClean} - The copy daemon (v$version, $vDate)"
-        out ""
-        fi
-        out "${txtBold}Usage:${txtClean}"
-        out "  (1st) $me [<option>...] <dest-dir> [<source>...]"
-        out "  (2nd) $me <command> [<argument>...]"
-        out ""
-        out "${txtBold}Options are:${txtClean}"
-        out "  -f <file>          Read list of source files from <file>, ignored when <source> is given"
-        out "  -o <cp-opt>        Add <cp-opt> to the called cp command"
-        out "  -R                 Copy recursive"
-        out "  -m                 Merge all files in <dest-dir>"
-        out ""
-        out "${txtBold}Commands are:${txtClean}"
-        out "  -C <job-id>        Cancel a pending or kill a running job"
-        out "  -D [<action>]      Print status and start/stop the daemon or job processing"
-        out "                     <action> can be +|-|start|stop"
-        if [[ $opt == "h" ]] ; then
-        out "  -h [c]             Show this help or when c=l License, c=s Source of ${txtBold}$me${txtClean}"
-        out "  -H                 Show more help"
-        else
-        out "  -h [c]             Show less help or when c=l License, c=s Source of ${txtBold}$me${txtClean}"
-        out "  -H                 Show this help"
-        fi
-        out "  -l [c]             List jobs, c=i by ID, or errors c=e, or the job log c=l"
-        out "  -P                 Process jobs or trigger daemon to continue"
-        out "  -p <job-id> <prio> Change job priority 3-7"
-        out "  -r <job-id>        Resume a job"
-        out "  -s <job-id>        Stop a job"
-        out "  -T                 Tidy up all job data"
-#         out "  -t                 Tidy up done jobs (TODO)"
-        if [[ $opt == "H" ]] ; then
-        out ""
-        out "${txtBold}Notes:${txtClean}"
-        out "  • The first form schedule a new copy task. When <source> is omitted, will read from stdin"
-        out "  • The second form list or change tasks"
-        out "  • The job priority is not static and affect only the start time. Highest priority is 0"
-        out "  • The executed copy command will be 'cp <cp-opt> --parents -t <dest-dir> <source>'"
-        out "  • -D stops job processing, if so, or stops the daemon at all, if not"
-        out "     Adding a new job trigger the daemon to continue job processing, there is no blocking"
-        out "  • -T does nothing else than 'rm -rf $tmpDir'"
-        out "  • -m removes --parents from options and add --backup=numbered"
-        out "  • Enclose <cp-opt> in quotes if you need more than one option"
-        out ""
-        out "${txtBold}Examples:${txtClean}"
-        out "  Enqueue new copy task"
-        out "    $me /media/1a/foo /media/1b/foo"
-        out ""
-        out "  Show status"
-        out "    $me -D"
-        out ""
-        fi
-        exit ; ;;
-  esac
+  cmdHelp "$opt"
+  exit 0
 done
 
 OPTIND="1"
-while getopts ?C:Df:lmo:p:PRr:s:T opt
+while getopts f:mor opt
 do
-
   case $opt in
-    C)  cmdCancel $OPTARG         ; exit ; ;;
-    D)  cmdDaemonize $@           ; exit ; ;;
     f)  [[ -f "$OPTARG" ]] || exitError "File not found: $OPTARG"
         optSourceList="$OPTARG"          ; ;;
-    l)  shift $(( $OPTIND - 1 ))
-        cmdList $1                ; exit ; ;;
     m)  optMerge="1"                     ; ;;
     o)  optExtraCopy="$OPTARG"           ; ;;
-    P)  cmdProcess                ; exit ; ;;
     R)  optRecursive="1"                 ; ;;
-    p)  shift $(( $OPTIND - 1 ))
-        cmdChangePrio $OPTARG $@  ; exit ; ;;
-    r)  cmdResume $OPTARG         ; exit ; ;;
-    s)  cmdStop $OPTARG           ; exit ; ;;
-    T)  cmdTidy                   ; exit ; ;;
 
     \?) exitError "Need help? Use: $me -h"  ; ;;
   esac
@@ -1152,6 +1149,31 @@ done
 
 shift $(( $OPTIND - 1 ))
 
-# At this point we have a new job to enqueue
-[[ -d "$1" ]] || exitError "Destination must be a directory"
-addNewJob "$@"
+cmd="$1"; shift
+
+if   [[ "H"               == "$cmd" ]] ; then cmdHelp "H"
+elif [[ "h"               == "$cmd" ]] ; then cmdHelp "$@"
+elif [[ "K"               == "$cmd" ]] ; then cmdKill "$@"
+elif [[ "P"               == "$cmd" ]] ; then cmdProcess
+elif [[ "Y"               == "$cmd" ]] ; then cmdTidy
+elif [[ "l"               == "$cmd" ]] ; then cmdList "$@"
+elif [[ "p"               == "$cmd" ]] ; then cmdChangePrio "$@"
+elif [[ "r"               == "$cmd" ]] ; then cmdResume "$@"
+elif [[ "s"               == "$cmd" ]] ; then cmdStop "$@"
+elif [[ "x"               == "$cmd" ]] ; then cmdExit
+elif (( ${#cmd} == 1 )) ; then exitError "Unknown short command: $cmd"
+elif [[ "exit"            =~ "$cmd" ]] ; then cmdExit
+elif [[ "kill"            =~ "$cmd" ]] ; then cmdKill "$@"
+elif [[ "list"            =~ "$cmd" ]] ; then cmdList "$@"
+elif [[ "newjob"          =~ "$cmd" ]] ; then cmdNewJob "$@"
+elif [[ "prio"            =~ "$cmd" ]] ; then cmdChangePrio "$@"
+elif [[ "process"         =~ "$cmd" ]] ; then cmdProcess
+elif [[ "resume"          =~ "$cmd" ]] ; then cmdResume "$@"
+elif [[ "start"           =~ "$cmd" ]] ; then cmdStartDaemon "$@"
+elif [[ "status"          =~ "$cmd" ]] ; then cmdStatus
+elif [[ "stop"            =~ "$cmd" ]] ; then cmdStop "$@"
+elif [[ "tidy"            =~ "$cmd" ]] ; then cmdTidy
+else exitError "Unknown command: $cmd"
+fi
+
+exit 0
