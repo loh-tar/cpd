@@ -38,6 +38,7 @@ declare    optMerge="0"
 declare    optNoProgress="0"
 declare    optExtraCopy=""
 declare    optSourceList=""
+declare    optUserPrio="0"
 
 declare -r tmpDir="/tmp/$me/user-$(id -un)"
 declare -r jobFile="$tmpDir/jobs"               # All jobs as key/value
@@ -93,8 +94,12 @@ checkTmpDir() {
   unLock
 }
 
-checkJobId() {
+check4PosInteger() {
   [[ "$1" =~ ^[0-9]+$ ]] || exitError "Not a positive integer: $1"
+}
+
+checkJobId() {
+  check4PosInteger "$1"
 
   [[ $(cut -d' ' -f1 "$jobFile" | grep -c "$1") -eq 0 ]] &&
     exitError "Job not found: $1"
@@ -287,7 +292,7 @@ cmdHelp() {
         fi
         out "  -m                       Merge all files in <dest-dir>"
         out "  -o <cp-opt>              Add <cp-opt> to the called cp command"
-#         out "  -p <user-prio>           Enqueue job with modified default priority. PRIO=6-<user-prio>" # TODO
+        out "  -p <user-prio>           Enqueue job with modified default priority. PRIO=6 minus <user-prio>"
         out "  -r                       Copy recursive"
         if ((! isAlterEgo )) ; then
         [[ $1 == "H" ]] && out ""
@@ -334,8 +339,7 @@ cmdHelp() {
         fi
 #         out "  • ${txtBold}-R,-m${txtClean} are ignored when ${txtBold}-o${txtClean} is present" # TODO
         out "  • Enclose ${txtBold}<cp-opt>${txtClean} in quotes if you need more than one option"
-#         out " • New jobs have prio 6 unless -p was given"
-        out "  • New jobs have prio 6"
+        out "  • New jobs have prio 6 unless -p was given"
         out ""
         out "${txtBold}Examples:${txtClean}"
         if (( ! isAlterEgo )) ; then
@@ -506,7 +510,7 @@ cmdChangePrio() {
   # Need parms: id prio
   [[ "$#" -ne 2 ]] && exitError "Need two arguments"
   checkJobId "$1"
-  [[ "$2" =~ ^[0-9]+$ ]] || exitError "Not a positive integer: $2"
+  check4PosInteger "$1"
   (( "$2" > 7 || "$2" < 3 )) && exitError "Priority must be 3-7 not: $2"
 
   checkStatus "$1" "pending"
@@ -1018,6 +1022,8 @@ processJobList() {
 
 cmdNewJob() {
   [[ -d "$1" ]] || exitError "Destination must be a directory"
+  check4PosInteger "$optUserPrio"
+  (( optUserPrio > 3 )) && { info "Adjust <user-prio> to 3\n"; optUserPrio="3"; }
 
   # Get the destination drive
   # FIXME: As long we have plain drives all is nice, but with mappers, raid or
@@ -1130,7 +1136,7 @@ cmdNewJob() {
   # PRIOrity is associated to STATUS as follows
   # STOPPING RESUME CANCEL running stopped pending error/kill/canceled done
   #    0        0     0        1      2      3-7           8             9
-  addToJobFile "$newId" "PRIO" "6"
+  addToJobFile "$newId" "PRIO" "$(( 6 - optUserPrio ))"
   addToJobFile "$newId" "STATUS" "pending"
   addToJobFile "$newId" "DONE" "0%"
   printf -v date "%(%FT%T)T" "-1"
@@ -1172,13 +1178,14 @@ do
 done
 
 OPTIND="1"
-while getopts f:mor opt
+while getopts f:mop:r opt
 do
   case $opt in
     f)  [[ -f "$OPTARG" ]] || exitError "File not found: $OPTARG"
         optSourceList="$OPTARG"          ; ;;
     m)  optMerge="1"                     ; ;;
     o)  optExtraCopy="$OPTARG"           ; ;;
+    p)  optUserPrio="$OPTARG"            ; ;;
     r)  optRecursive="1"                 ; ;;
 
     \?) exitError "Need help? Use: $me -h"  ; ;;

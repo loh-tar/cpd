@@ -22,6 +22,7 @@ To change this edit in the source the setting of "simulationMode" from "1" to "0
     -f <file>                Read list of source files from <file>
     -m                       Merge all files in <dest-dir>
     -o <cp-opt>              Add <cp-opt> to the called cp command
+    -p <user-prio>           Enqueue job with modified default priority. PRIO=6 minus <user-prio>
     -r                       Copy recursive
 
 ### Commands are:
@@ -122,6 +123,8 @@ Copy _cpd_ somewhere to your $PATH and create a symlink there at your taste, e.g
 
   - Change prio of jobs like so: cpc mov job x above/below job y
   or in some other way to have a better solution as right now
+  - An option to specify the command to use, e.g: _cpc -B mv foo bar_ to move
+  instead of copy the files. (B like binary)
 
 ### Credits
 
