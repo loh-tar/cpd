@@ -45,9 +45,11 @@ To change this edit in the source the setting of "simulationMode" from "1" to "0
 Enqueue a couple of jobs
 
     cpd newjob /media/a /foo/*
-    cpd newjob /media/b /bar/*
-    cpd newjob /media/c /baz/*
     ...
+
+Assumed you have a symlink _cpc->cpd_
+
+    cpc /media/b /bar/*
 
 Process the jobs in the foreground...
 
@@ -107,7 +109,7 @@ or
 
 #### From Source
 
-Copy _cpd_ somewhere to your $PATH, that's all.
+Copy _cpd_ somewhere to your $PATH and create a symlink there at your taste, e.g. _ln -s cpd cpc_ that's all.
 
 ### TODO
 

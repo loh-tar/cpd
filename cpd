@@ -19,9 +19,19 @@
 #   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
 #   MA 02110-1301, USA.
 
-declare -r me=$(basename "$0")
-declare -r version="0.1pre6"
+declare -r version="0.1pre7"
 declare -r vDate="Dez 2017"
+
+declare -r me=$(basename $(readlink -e $0 ))
+declare    alterEgo=$(basename "$0")
+if [[ "$me" == "$alterEgo" ]] ; then
+declare -r isAlterEgo="0"
+alterEgo="cpc"                                  # Only because to ease help printing
+else
+declare -r isAlterEgo="1"
+fi
+readonly alterEgo
+
 declare -r simulationMode="1"
 declare    optRecursive="0"
 declare    optMerge="0"
@@ -241,10 +251,19 @@ cmdHelp() {
     s)  less "$0"
     ;;
     *)  if [[ $1 == "H" ]] ; then
-        out "This is ${txtBold}cpd${txtClean} - The copy daemon (v$version, $vDate)"
+        out "This is ${txtBold}$me${txtClean} - The copy daemon (v$version, $vDate)"
+        (( isAlterEgo )) && out "Running as alter ego '${txtBold}$alterEgo${txtClean}' with limited range"
         out ""
         fi
         out "${txtBold}Usage:${txtClean}"
+        if (( isAlterEgo )) ; then
+#         out "  $alterEgo [option>...] <source> <destination>"      # TODO
+#         out "  $alterEgo [option>...] <source>... <dest-dir>"      # TODO
+        out "  $alterEgo [option>...] <dest-dir> <source>..."        # DELETE
+#         out "  $alterEgo [option>...] -t <dest-dir> <source>..."   # TODO
+        out "  $alterEgo [option>...] <dest-dir>                   # Read list of sources from stdin"
+        out "  $alterEgo [option>...] -f <file> <dest-dir>"
+        else
         out "  $me [option>...] <command> [<argument>...]"
 #         out "  $me [option>...] newjob <source> <destination>"      # TODO
 #         out "  $me [option>...] newjob <source>... <dest-dir>"      # TODO
@@ -252,18 +271,25 @@ cmdHelp() {
 #         out "  $me [option>...] newjob -t <dest-dir> <source>..."   # TODO
         out "  $me [option>...] newjob <dest-dir>                   # Read list of sources from stdin"
         out "  $me [option>...] newjob -f <file> <dest-dir>"
+        fi
 #         [[ $1 == "H" ]] && out ""
 #         out "${txtBold}Main Options:${txtClean}"
 #         out "  -s                       Run only a simulation, copy nothing" # TODO
 #         out "  -v                       Be verbose" # TODO
 #         out "  -q                       Be almost quiet" # TODO
         [[ $1 == "H" ]] && out ""
-        out "${txtBold}New Job Options:${txtClean}"
+        out "${txtBold}Options:${txtClean}"
         out "  -f <file>                Read list of source files from <file>"
+        if [[ $1 == "H" ]] ; then
+        out "  -h                       Print less help"
+        else
+        out "  -H                       Print more help"
+        fi
         out "  -m                       Merge all files in <dest-dir>"
         out "  -o <cp-opt>              Add <cp-opt> to the called cp command"
 #         out "  -p <user-prio>           Enqueue job with modified default priority. PRIO=6-<user-prio>" # TODO
         out "  -r                       Copy recursive"
+        if ((! isAlterEgo )) ; then
         [[ $1 == "H" ]] && out ""
         out "${txtBold}Commands:${txtClean}"
         if [[ $1 == "h" ]] ; then
@@ -292,33 +318,45 @@ cmdHelp() {
 #         out "  s, stop <job>...         Stop a job" # TODO
         out "  Y, tidy                  Tidy up all job data"
 #         out "  -t                 Tidy up done jobs (TODO)"
+        fi
         if [[ $1 == "H" ]] ; then
         out ""
         out "${txtBold}Notes:${txtClean}"
-#         out "  • Calling cpd with any other name than ${txtBold}cpd${txtClean} forces to run as if ${txtBold}newjob${txtClean} was given" # TODO
-        out "  • The ${txtBold}<command>${txtClean} is lazy recognized by any parts of its long name"
+        if (( ! isAlterEgo )) ; then
+        out "  • Calling $me with any other name than ${txtBold}$me${txtClean}" \
+                "forces to run as if ${txtBold}newjob${txtClean} was given"
+        out "  • The ${txtBold}<command>${txtClean} is fuzzy recognized by any parts of its long name"
         out "  • The job priority is not static. Lower numbers have a higher priority"
         out "    Jobs started in order of priority and enqueue time. 0-2(active), 8+9(old) are intern used"
-#         out "    New jobs have prio 6 unless -p was given"
-        out "    New jobs have prio 6 unless"
         out "  • ${txtBold}exit${txtClean} stops job processing, if so, or stops the daemon at all, if not"
         out "    Adding a new job trigger the daemon to continue job processing, there is no blocking"
         out "  • ${txtBold}tidy${txtClean} does nothing else than 'rm -rf $tmpDir'"
+        fi
 #         out "  • ${txtBold}-R,-m${txtClean} are ignored when ${txtBold}-o${txtClean} is present" # TODO
         out "  • Enclose ${txtBold}<cp-opt>${txtClean} in quotes if you need more than one option"
-#         out ""
-#         out "${txtBold}Examples:${txtClean}"
-#         out "  Enqueue new copy task, assumed you have a symlink cpc->cpd" # TODO
-#         out "    cpc -p1  /media/1a/foo *                       # New job with higher PRIO=5"
-#         out "    cpc /media/1c/foo < /path/to/list-of-files"
-#         out "    find * -type f -print | cpc -p2 /media/1d/foo"
-#         out ""
-#         out "  Take a look how it is going"
-#         out "    watch -n1 cpd list"
-#         out "    watch -n1 cpd status"
-#         out "    watch -n1 cpd w"
-#         out "    watch -n1 cpd w s"
-#         out ""
+#         out " • New jobs have prio 6 unless -p was given"
+        out "  • New jobs have prio 6"
+        out ""
+        out "${txtBold}Examples:${txtClean}"
+        if (( ! isAlterEgo )) ; then
+        out "  Enqueue new copy task"
+        out "    $me new /media/1a/foo *"
+        out ""
+        out "  Enqueue new copy task, assumed you have a symlink $alterEgo->$me"
+        fi
+#         out "    $alterEgo -p1  /media/1b/foo *                       # New job with higher PRIO=5"
+        out "    $alterEgo /media/1b/foo *"
+        out "    $alterEgo /media/1c/foo < /path/to/list-of-files"
+#         out "    find * -type f -print | $alterEgo -p2 /media/1d/foo"
+        out "    find * -type f -print | $alterEgo /media/1d/foo"
+        if (( ! isAlterEgo )) ; then
+        out ""
+        out "  Take a look how it is going"
+        out "    watch -n1 $me list"
+        out "    watch -n1 $me status"
+        out "    watch -n1 $me w"
+        out "    watch -n1 $me w s"
+        fi
         fi
     ;;
   esac
@@ -531,7 +569,7 @@ cmdStartDaemon() {
       exec 2>"$tmpDir/daemon-error.log"
       exec 0</dev/null
 
-      printf "%(%FT%T)T cpd daemon started with pid $$\n" "-1"
+      printf "%(%FT%T)T $me daemon started with pid $$\n" "-1"
       (( simulationMode )) && printf "*\n* Running in simulation mode, nothing will copied\n*\n"
 
       # Mike suggest to run a daemon in / but I think that should be ok
@@ -579,7 +617,7 @@ cmdStartDaemon() {
                 # as an other user than the caller (?)
       $meFullPath start DAEMON  >/dev/null 2>/dev/null </dev/null &
       # FIXME: Print to tty like Mike, No \n, for now
-      info "cpd daemon started with pid $!"
+      info "$me daemon started with pid $!"
       (( simulationMode )) && info "\n${txtBold}Hint: ${txtClean}Running in simulation mode, nothing will copied"
     ;;
 
@@ -1141,13 +1179,15 @@ do
         optSourceList="$OPTARG"          ; ;;
     m)  optMerge="1"                     ; ;;
     o)  optExtraCopy="$OPTARG"           ; ;;
-    R)  optRecursive="1"                 ; ;;
+    r)  optRecursive="1"                 ; ;;
 
     \?) exitError "Need help? Use: $me -h"  ; ;;
   esac
 done
 
 shift $(( $OPTIND - 1 ))
+
+(( isAlterEgo )) && { cmdNewJob "$@"; exit 0; }
 
 cmd="$1"; shift
 
