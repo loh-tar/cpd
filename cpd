@@ -98,6 +98,10 @@ check4PosInteger() {
   [[ "$1" =~ ^[0-9]+$ ]] || exitError "Not a positive integer: $1"
 }
 
+isDelta() {
+  [[ "$1" =~ ^[+-][0-9]+$ ]] && return 1 || return 0
+}
+
 checkJobId() {
   check4PosInteger "$1"
 
@@ -315,8 +319,7 @@ cmdHelp() {
         out "  l, list [c]              List jobs, c=i by ID, or errors c=e, or the job log c=l" # DELETE
         out "  K, kill <job-id>         Cancel a pending or kill a running job" # DELETE
 #         out "  k, kill <job>...       Cancel a pending or kill a running job" # TODO
-        out "  p, prio <job-id> <prio>  Change job priority 3-7" # DELETE
-#         out "  c, prio <prio> <job>...  Change job priority 3-7 or delta if +-<prio>" # TODO
+        out "  p, prio <prio> <job>...  Change job PRIO to <prio> or 'PRIO=PRIO minus <prio>' if +-<prio>"
         out "  r, resume <job-id>       Resume a job" # DELETE
 #         out "  r, resume <job>...       Resume a job" # TODO
         out "  s, stop <job-id>         Stop a job" # DELETE
@@ -508,16 +511,44 @@ cmdStop() {
 
 cmdChangePrio() {
   # Need parms: id prio
-  [[ "$#" -ne 2 ]] && exitError "Need two arguments"
-  checkJobId "$1"
-  check4PosInteger "$1"
-  (( "$2" > 7 || "$2" < 3 )) && exitError "Priority must be 3-7 not: $2"
+  (( $# < 2 )) && exitError "Need two arguments"
 
-  checkStatus "$1" "pending"
+  local prio="0" delta="0"
 
-  out "Change priority of job $1 to $2"
-  setLock || exitError "Job not changed"
-  modifyJob $1 "PRIO" $2
+  adjustPrio() {
+    local -n p="$1"
+    (( p > 7 )) && { info "Adjust PRIO from $p to 7\n"; p="7"; }
+    (( p < 3 )) && { info "Adjust PRIO from $p to 3\n"; p="3"; }
+  }
+
+  if isDelta "$1"; then
+    check4PosInteger "$1"
+    prio="$1"
+    adjustPrio "prio"
+  else
+    delta="$1"
+  fi
+
+  shift
+
+  for jobId ; do check4PosInteger "$jobId"; done
+
+  setLock || exitError "No job changed"
+
+  for jobId ; do
+    if [[ $(getJobValue "$jobId" "STATUS") != "pending" ]] ; then
+      info "Ignore not pending job: $jobId\n"
+      continue
+    fi
+
+    oldPrio=$(getJobValue "$jobId" "PRIO")
+    let newPrio=oldPrio-delta
+    (( prio )) && let newPrio=prio
+    adjustPrio "newPrio"
+    out "Change priority of job $jobId from $oldPrio to $newPrio"
+    modifyJob $jobId "PRIO" $newPrio
+  done
+
   unLock
 }
 

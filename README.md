@@ -36,7 +36,7 @@ To change this edit in the source the setting of "simulationMode" from "1" to "0
        status                Print status of the daemon and job processing
     l, list [c]              List jobs, c=i by ID, or errors c=e, or the job log c=l
     K, kill <job-id>         Cancel a pending or kill a running job
-    p, prio <job-id> <prio>  Change job priority 3-7
+    p, prio <prio> <job>...  Change job PRIO to <prio> or 'PRIO=PRIO minus <prio>' if +-<prio>
     r, resume <job-id>       Resume a job
     s, stop <job-id>         Stop a job
     Y, tidy                  Tidy up all job data
