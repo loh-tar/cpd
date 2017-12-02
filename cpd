@@ -19,7 +19,7 @@
 #   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
 #   MA 02110-1301, USA.
 
-declare -r version="0.1pre7"
+declare -r version="0.1pre8"
 declare -r vDate="Dez 2017"
 
 declare -r me=$(basename $(readlink -e $0 ))
@@ -294,10 +294,10 @@ cmdHelp() {
         else
         out "  -H                       Print more help"
         fi
-        out "  -m                       Merge all files in <dest-dir>"
-        out "  -o <cp-opt>              Add <cp-opt> to the called cp command"
+        out "  -m                       Merge all files in <dest-dir>. Ignored if -o is given"
+        out "  -o <cp-opt>              Add <cp-opt> to the called cp command. Disables -r/-m if given"
         out "  -p <user-prio>           Enqueue job with modified default priority. PRIO=6 minus <user-prio>"
-        out "  -r                       Copy recursive"
+        out "  -r                       Copy recursive. Ignored if -o is given"
         if ((! isAlterEgo )) ; then
         [[ $1 == "H" ]] && out ""
         out "${txtBold}Commands:${txtClean}"
@@ -340,7 +340,6 @@ cmdHelp() {
         out "    Adding a new job trigger the daemon to continue job processing, there is no blocking"
         out "  • ${txtBold}tidy${txtClean} does nothing else than 'rm -rf $tmpDir'"
         fi
-#         out "  • ${txtBold}-R,-m${txtClean} are ignored when ${txtBold}-o${txtClean} is present" # TODO
         out "  • Enclose ${txtBold}<cp-opt>${txtClean} in quotes if you need more than one option"
         out "  • New jobs have prio 6 unless -p was given"
         out ""
@@ -1071,34 +1070,15 @@ cmdNewJob() {
 
   local target=$(realpath "$1") ; shift
 
-  # Examine optExtraCopy
-  # Remove, we do it: -R, -r, --recursive
-  # Not allowed: -i, --interactive, -T, --no-target-directory --help --version
-  # Special case: -a, --archive
-  # FIXME What else?
-  local copyOptions=""
-  for o in $optExtraCopy
-  do
-    if [[ $o =~ ^-[0-9a-Z][0-9a-Z]+ ]] ; then
-      exitError "Not allowed yet, sorry. Please split to single options: $o"
-    elif [[ $o =~ ^-[iT] ]] ; then
-      exitError "Not allowed, sorry: $o"
-    elif [[ "--recursive --no-target-directory --help --version" =~ $o ]] ; then
-      exitError "Not allowed, sorry: $o"
-    elif [[ $o =~ ^-[rR] ]] ; then
-      optRecursive="1"
-    elif [[ $o =~ ^-a || "$o" == "--archive" ]] ; then
-      optRecursive="1"
-      copyOptions="$copyOptions -a"
+  if [[ -z "$optExtraCopy" ]] ; then
+    if (( optMerge )) ; then
+      copyOptions="$copyOptions --backup=numbered"
     else
-      copyOptions="$copyOptions $o"
+      copyOptions="$copyOptions --parents"
     fi
-  done
-
-  if (( optMerge )) ; then
-    copyOptions="$copyOptions --backup=numbered"
   else
-    copyOptions="$copyOptions --parents"
+    optRecursive="0"
+    copyOptions="$optExtraCopy"
   fi
 
   checkTmpDir
@@ -1109,11 +1089,11 @@ cmdNewJob() {
   addSourceFile() {
     [[ ! -e "$1" ]] && exitError "File not found: $1"
 
-    if [[ -d "$1" ]] ; then
+    if [[ -z "$optExtraCopy" ]] && [[ -d "$1" ]] ; then
       if (( ! optRecursive )) ; then
         # Remove directories from file list. They would only cause
         # warnings when running cp without -r
-        info "Omit directory: $1\n"
+        info "Omitted: $1\n"
         return
       else
         find "$1" -type f -printf "%s\t%p\n" >> "$newJobFiles"
@@ -1160,7 +1140,12 @@ cmdNewJob() {
   out "New job: $newId ($count files, $total total, $(numfmt --to=si $bytesPerFile) avg size)"
   out "Target : $target"
   out "Files  : ${files}"
-  (( ${#copyOptions} )) && out "Options: $copyOptions"
+  if [[ -n "$optExtraCopy" ]] ; then
+  out "Note   : Listed job data may differ due to given special cp options"
+  fi
+  if (( ${#copyOptions} )) ; then
+  out "Options: $copyOptions"
+  fi
 
   mv "$newJobFiles" "$tmpDir/job-files-$newId"
 
@@ -1209,7 +1194,7 @@ do
 done
 
 OPTIND="1"
-while getopts f:mop:r opt
+while getopts f:mo:p:r opt
 do
   case $opt in
     f)  [[ -f "$OPTARG" ]] || exitError "File not found: $OPTARG"

@@ -20,10 +20,10 @@ To change this edit in the source the setting of "simulationMode" from "1" to "0
 ### Options are:
 
     -f <file>                Read list of source files from <file>
-    -m                       Merge all files in <dest-dir>
-    -o <cp-opt>              Add <cp-opt> to the called cp command
+    -m                       Merge all files in <dest-dir>. Ignored if -o is given
+    -o <cp-opt>              Add <cp-opt> to the called cp command. Disables -r/-m if given
     -p <user-prio>           Enqueue job with modified default priority. PRIO=6 minus <user-prio>
-    -r                       Copy recursive
+    -r                       Copy recursive. Ignored if -o is given
 
 ### Commands are:
 
