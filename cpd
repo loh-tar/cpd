@@ -349,19 +349,19 @@ cmdHelp() {
         out "    $me new /media/1a/foo *"
         out ""
         out "  Enqueue new copy task, assumed you have a symlink $alterEgo->$me"
+        else
+        out "    $alterEgo /media/1a/foo *"
         fi
-#         out "    $alterEgo -p1  /media/1b/foo *                       # New job with higher PRIO=5"
-        out "    $alterEgo /media/1b/foo *"
+        out "    $alterEgo -p1 /media/1b/foo *                       # New job with higher PRIO=5"
         out "    $alterEgo /media/1c/foo < /path/to/list-of-files"
-#         out "    find * -type f -print | $alterEgo -p2 /media/1d/foo"
-        out "    find * -type f -print | $alterEgo /media/1d/foo"
+        out "    find * -type f -print | $alterEgo -p2 /media/1d/foo"
         if (( ! isAlterEgo )) ; then
         out ""
         out "  Take a look how it is going"
         out "    watch -n1 $me list"
         out "    watch -n1 $me status"
-        out "    watch -n1 $me w"
-        out "    watch -n1 $me w s"
+#         out "    watch -n1 $me w"
+#         out "    watch -n1 $me w s"
         fi
         fi
     ;;
@@ -1140,7 +1140,8 @@ cmdNewJob() {
   local total=$(numfmt --to=si $bytes)
   local bytesPerFile=$(( bytes / count ))
 
-  out "New job: $newId ($count files, $total total, $(numfmt --to=si $bytesPerFile) avg size)"
+  out "New job: $newId - PRIO $(( 6 - optUserPrio ))" \
+      "($count files, $total total, $(numfmt --to=si $bytesPerFile) avg size)"
   out "Target : $target"
   out "Files  : ${files}"
   if [[ -n "$optExtraCopy" ]] ; then
