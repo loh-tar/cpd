@@ -266,21 +266,18 @@ cmdHelp() {
         fi
         out "${txtBold}Usage:${txtClean}"
         if (( isAlterEgo )) ; then
-#         out "  $alterEgo [option>...] <source> <destination>"      # TODO
-#         out "  $alterEgo [option>...] <source>... <dest-dir>"      # TODO
-        out "  $alterEgo [option>...] <dest-dir> <source>..."        # DELETE
-#         out "  $alterEgo [option>...] -t <dest-dir> <source>..."   # TODO
-        out "  $alterEgo [option>...] <dest-dir>                   # Read list of sources from stdin"
-        out "  $alterEgo [option>...] -f <file> <dest-dir>"
+        local who="$alterEgo"
         else
-        out "  $me [option>...] <command> [<argument>...]"
-#         out "  $me [option>...] newjob <source> <destination>"      # TODO
-#         out "  $me [option>...] newjob <source>... <dest-dir>"      # TODO
-        out "  $me [option>...] newjob <dest-dir> <source>..."        # DELETE
-#         out "  $me [option>...] newjob -t <dest-dir> <source>..."   # TODO
-        out "  $me [option>...] newjob <dest-dir>                   # Read list of sources from stdin"
-        out "  $me [option>...] newjob -f <file> <dest-dir>"
+        local who="$me"
+        local extra=" newjob"
+        out "  $who [option>...] <command> [<argument>...]"
         fi
+#         out "  $who [option>...]$extra <source> <destination>"      # TODO
+#         out "  $who [option>...]$extra <source>... <dest-dir>"      # TODO
+        out "  $who [option>...]$extra <dest-dir> <source>..."        # DELETE
+#         out "  $who [option>...]$extra -t <dest-dir> <source>..."   # TODO
+        out "  $who [option>...]$extra <dest-dir>                   # Read list of sources from stdin"
+        out "  $who [option>...]$extra -f <file> <dest-dir>"
 #         [[ $1 == "H" ]] && out ""
 #         out "  -v                       Be verbose" # TODO
 #         out "  -q                       Be almost quiet" # TODO
