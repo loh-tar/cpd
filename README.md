@@ -29,11 +29,10 @@ The purpose is collect copy jobs and start them only if the target drive is not 
        start                 Start the daemon and job processing
     x, exit                  Terminate the daemon and job processing
     P, process               Process jobs in foreground or trigger daemon to continue
-       status                Print status of the daemon and job processing
-    l, list [c]              List jobs, c=i by ID, or errors c=e, or the job log c=l
     K, kill <job>...         Kill a running or cancel a pending job
     p, prio <prio> <job>...  Change job PRIO to <prio> or 'PRIO=PRIO minus <prio>' if +-<prio>
     r, resume <job>...       Resume jobs
+    w, show [c]              Show jobs, c=i by ID, c=e errors, c=l job log, c=s daemon status
     s, stop <job>...         Stop jobs
     Y, tidy                  Tidy up all job data
 
@@ -58,9 +57,11 @@ Process the jobs in the foreground...
 
 ...and take a look how it is going
 
-    watch -n1 cpd l
+    watch -n1 cpd w
+
 or
-    watch -n1 cpd status
+
+    watch -n1 cpd w s
 
 ### Simulation Mode
 
@@ -71,7 +72,7 @@ Instead of calling _cp_ with all job parameter, there will only start a _sleep/f
     $ ./runTest
     Start with clean tmp dir
 
-    Run: ./cpd l
+    Run: ./cpd w
     ID PRIO STATUS   SIZE  DRIVE            TARGET                FILES
       4   3  pending    7K  luks-as2dws34xy  /media/luks/foo       data1
       5   3  pending    9M  luks-as2dws34xy  /media/luks/foo       secret stuff important data
@@ -98,7 +99,7 @@ Instead of calling _cp_ with all job parameter, there will only start a _sleep/f
     Done    [  3] [/dev/sdd       ]         /media/d/foo <- /media/data/raz /media/data/baz
     All done
 
-    Run: ./cpd l e
+    Run: ./cpd w e
     >>>>> Error log of job 6
     What ever was wrong
 
@@ -116,9 +117,10 @@ that's all.
 
 ### TODO
 
-  - Add command to view the various log files
   - Improve detection of true target drives
   - BUG: Does not handle filenames with newline
+  - Modify command _show_ to view a specific log file
+  - Modify command _show w_ to take arguments to choose data to display
   - Solution to #6
   - Enhance this list
 

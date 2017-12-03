@@ -310,12 +310,10 @@ cmdHelp() {
         out "  P, process               Process jobs in foreground or trigger daemon to continue"
 #         out "  P, process               Process jobs in foreground" TODO
         fi
-#         out "  w, show [c]              Show jobs, c=i by ID, or errors c=e, or job log c=l, daemon status c=s" # TODO
-        out "     status                Print status of the daemon and job processing" # DELETE
-        out "  l, list [c]              List jobs, c=i by ID, or errors c=e, or the job log c=l" # DELETE
         out "  K, kill <job>...         Kill a running or cancel a pending job"
         out "  p, prio <prio> <job>...  Change job PRIO to <prio> or 'PRIO=PRIO minus <prio>' if +-<prio>"
         out "  r, resume <job>...       Resume jobs"
+        out "  w, show [c]              Show jobs, c=i by ID, c=e errors, c=l job log, c=s daemon status"
         out "  s, stop <job>...         Stop jobs"
         out "  Y, tidy                  Tidy up all job data"
 #         out "  y, Tidy                 Tidy up done jobs (TODO)"
@@ -352,10 +350,8 @@ cmdHelp() {
         if (( ! isAlterEgo )) ; then
         out ""
         out "  Take a look how it is going"
-        out "    watch -n1 $me list"
-        out "    watch -n1 $me status"
-#         out "    watch -n1 $me w"
-#         out "    watch -n1 $me w s"
+        out "    watch -n1 $me w"
+        out "    watch -n1 $me w s"
         fi
         fi
     ;;
@@ -377,11 +373,43 @@ outJobLine() {
   out "${txt:0:$screenWidth}"
 }
 
-cmdList() {
+showStatus() {
+  if getDaemonPid ; then
+    out "Daemon is running with pid $daemonPID"
+    cut "-c-$screenWidth" "$tmpDir/processStatus" 2>/dev/null
+    # Thanks to Daniel
+    # https://unix.stackexchange.com/a/325581
+    if compgen -G "$tmpDir/job-status-*" > /dev/null; then
+      out ""
+      out "Running jobs:"
+      cut "-c-$screenWidth" "$tmpDir"/job-status-* 2>/dev/null
+    fi
+  else
+    out "No running daemon"
+  fi
+
+  if [[ -s "$jobFile" ]] ; then
+    out "\nJobs by status:"
+    for s in "Running" "Error" "NoStart" "Pending" "Killed" "Canceled" "Done"
+    do
+      # Grepping lines like:  1:STATUS:foobar
+      local jobCount=$(grep -i "STATUS:$s" "$tmpDir/jobs" | wc -l)
+      (( jobCount )) || continue
+      local -a jobs=($(grep -i "STATUS:$s" "$tmpDir/jobs" | cut -d: -f1))
+      printf -v txt "  %-8s %5s: %s" "$s" "($jobCount)" "${jobs[*]}"
+      out "$txt"
+    done
+  else
+    out "\nNo jobs"
+  fi
+}
+
+cmdShow() {
   # TODO: Add more options for different kind of display. The are so much
   # possibilities: filters, sort order, show as ticket, selected fields...
   local type="$1"
   [[ -f "$jobFile" ]] || type="NoJobs"
+  [[ "$1" == "s"   ]] && type="showStatus"
 
   setScreenWidth
 
@@ -403,6 +431,10 @@ cmdList() {
 
     NoJobs)
       out "No jobs to list"
+      ;;
+
+    showStatus)
+      showStatus
       ;;
 
     *)
@@ -706,39 +738,6 @@ cmdExit() {
   else
     info " - OK\n"
     exit 0
-  fi
-}
-
-cmdStatus() {
-  setScreenWidth
-
-  if getDaemonPid ; then
-    out "Daemon is running with pid $daemonPID"
-    cut "-c-$screenWidth" "$tmpDir/processStatus" 2>/dev/null
-    # Thanks to Daniel
-    # https://unix.stackexchange.com/a/325581
-    if compgen -G "$tmpDir/job-status-*" > /dev/null; then
-      out ""
-      out "Running jobs:"
-      cut "-c-$screenWidth" "$tmpDir"/job-status-* 2>/dev/null
-    fi
-  else
-    out "No running daemon"
-  fi
-
-  if [[ -s "$jobFile" ]] ; then
-    out "\nJobs by status:"
-    for s in "Running" "Error" "NoStart" "Pending" "Killed" "Canceled" "Done"
-    do
-      # Grepping lines like:  1:STATUS:foobar
-      local jobCount=$(grep -i "STATUS:$s" "$tmpDir/jobs" | wc -l)
-      (( jobCount )) || continue
-      local -a jobs=($(grep -i "STATUS:$s" "$tmpDir/jobs" | cut -d: -f1))
-      printf -v txt "  %-8s %5s: %s" "$s" "($jobCount)" "${jobs[*]}"
-      out "$txt"
-    done
-  else
-    out "\nNo jobs"
   fi
 }
 
@@ -1240,19 +1239,19 @@ elif [[ "h"               == "$cmd" ]] ; then cmdHelp "$@"
 elif [[ "K"               == "$cmd" ]] ; then cmdKill "$@"
 elif [[ "P"               == "$cmd" ]] ; then cmdProcess
 elif [[ "Y"               == "$cmd" ]] ; then cmdTidy
-elif [[ "l"               == "$cmd" ]] ; then cmdList "$@"
 elif [[ "p"               == "$cmd" ]] ; then cmdChangePrio "$@"
 elif [[ "r"               == "$cmd" ]] ; then cmdResume "$@"
 elif [[ "s"               == "$cmd" ]] ; then cmdStop "$@"
+elif [[ "w"               == "$cmd" ]] ; then cmdShow "$@"
 elif [[ "x"               == "$cmd" ]] ; then cmdExit
 elif (( ${#cmd} == 1 )) ; then exitError "Unknown short command: $cmd"
 elif [[ "exit"            =~ "$cmd" ]] ; then cmdExit
 elif [[ "kill"            =~ "$cmd" ]] ; then cmdKill "$@"
-elif [[ "list"            =~ "$cmd" ]] ; then cmdList "$@"
 elif [[ "newjob"          =~ "$cmd" ]] ; then cmdNewJob "$@"
 elif [[ "prio"            =~ "$cmd" ]] ; then cmdChangePrio "$@"
 elif [[ "process"         =~ "$cmd" ]] ; then cmdProcess
 elif [[ "resume"          =~ "$cmd" ]] ; then cmdResume "$@"
+elif [[ "show"            =~ "$cmd" ]] ; then cmdShow "$@"
 elif [[ "start"           =~ "$cmd" ]] ; then cmdStartDaemon "$@"
 elif [[ "status"          =~ "$cmd" ]] ; then cmdStatus
 elif [[ "stop"            =~ "$cmd" ]] ; then cmdStop "$@"
