@@ -32,9 +32,9 @@ declare -r isAlterEgo="1"
 fi
 readonly alterEgo
 
-declare -r simulationMode="1"
 declare    optRecursive="0"
 declare    optMerge="0"
+declare    optSimulation="0"
 declare    optNoProgress="0"
 declare    optExtraCopy=""
 declare    optSourceList=""
@@ -282,8 +282,6 @@ cmdHelp() {
         out "  $me [option>...] newjob -f <file> <dest-dir>"
         fi
 #         [[ $1 == "H" ]] && out ""
-#         out "${txtBold}Main Options:${txtClean}"
-#         out "  -s                       Run only a simulation, copy nothing" # TODO
 #         out "  -v                       Be verbose" # TODO
 #         out "  -q                       Be almost quiet" # TODO
         [[ $1 == "H" ]] && out ""
@@ -298,7 +296,8 @@ cmdHelp() {
         out "  -o <cp-opt>              Add <cp-opt> to the called cp command. Disables -r/-m if given"
         out "  -p <user-prio>           Enqueue job with modified default priority. PRIO=6 minus <user-prio>"
         out "  -r                       Copy recursive. Ignored if -o is given"
-        if ((! isAlterEgo )) ; then
+        if (( ! isAlterEgo )) ; then
+        out "  -s                       Run a simulation, copy nothing. Affect only process & start"
         [[ $1 == "H" ]] && out ""
         out "${txtBold}Commands:${txtClean}"
         if [[ $1 == "h" ]] ; then
@@ -339,6 +338,7 @@ cmdHelp() {
         out "  • ${txtBold}exit${txtClean} stops job processing, if so, or stops the daemon at all, if not"
         out "    Adding a new job trigger the daemon to continue job processing, there is no blocking"
         out "  • ${txtBold}tidy${txtClean} does nothing else than 'rm -rf $tmpDir'"
+        out "  • With -s will only run a sleep/forced-error job with a crude chosen time of a few seconds."
         fi
         out "  • Enclose ${txtBold}<cp-opt>${txtClean} in quotes if you need more than one option"
         out "  • New jobs have prio 6 unless -p was given"
@@ -563,7 +563,7 @@ cmdTidy() {
 
 cmdProcess() {
   notifyDaemon && exitGood "Running daemon with pid $daemonPID is triggered to do the job"
-  (( simulationMode )) && info "${txtBold}Hint: ${txtClean}Running in simulation mode, nothing will copied\n"
+  (( optSimulation )) && info "${txtBold}Running a simulation, nothing will copied${txtClean}\n"
 
   checkTmpDir
   cd "$tmpDir"
@@ -604,7 +604,7 @@ cmdStartDaemon() {
       exec 0</dev/null
 
       printf "%(%FT%T)T $me daemon started with pid $$\n" "-1"
-      (( simulationMode )) && printf "*\n* Running in simulation mode, nothing will copied\n*\n"
+      (( optSimulation )) && printf "*\n* Running in simulation mode, nothing will copied\n*\n"
 
       # Mike suggest to run a daemon in / but I think that should be ok
       cd "$tmpDir"
@@ -649,15 +649,19 @@ cmdStartDaemon() {
     BANISHMENT) # 2. child
       # umask 0 # Mike does this, but for now we don't want a daemon running
                 # as an other user than the caller (?)
-      $meFullPath start DAEMON  >/dev/null 2>/dev/null </dev/null &
+      (( optSimulation )) && local simOrNot="-s"
+      $meFullPath $simOrNot start DAEMON  >/dev/null 2>/dev/null </dev/null &
       # FIXME: Print to tty like Mike, No \n, for now
       info "$me daemon started with pid $!"
-      (( simulationMode )) && info "\n${txtBold}Hint: ${txtClean}Running in simulation mode, nothing will copied"
     ;;
 
     *) # 1. entry point
       getDaemonPid && { info "Daemon is already running with pid $daemonPID\n"; exit 0; }
-      setsid $meFullPath start BANISHMENT  &
+      if (( optSimulation )) ; then
+        info "Start daemon in simulation mode, nothing will copied\n"
+        local simOrNot="-s"
+      fi
+      setsid $meFullPath $simOrNot start BANISHMENT  &
     ;;
   esac
 }
@@ -695,7 +699,6 @@ cmdStatus() {
 
   if getDaemonPid ; then
     out "Daemon is running with pid $daemonPID"
-    (( simulationMode )) && out "${txtBold}Hint: ${txtClean}Running in simulation mode, nothing will copied"
     cut "-c-$screenWidth" "$tmpDir/processStatus" 2>/dev/null
     # Thanks to Daniel
     # https://unix.stackexchange.com/a/325581
@@ -706,7 +709,6 @@ cmdStatus() {
     fi
   else
     out "No running daemon"
-    (( simulationMode )) && out "${txtBold}Hint: ${txtClean}Simulation mode is active, nothing will copied"
   fi
 
   if [[ -s "$jobFile" ]] ; then
@@ -739,7 +741,7 @@ startJob() {
 
   local jobHome="${jobData["$1:HOME"]}"
 
-if (( simulationMode )) ; then
+if (( optSimulation )) ; then
   local cmd2 st=$((($RANDOM % 9) * 2)) # SleepTime
   # Assume we have only wrong HOME settings in our test data,
   # force an error when sleep time is 4
@@ -761,7 +763,7 @@ fi
     # FIXME: This solution with xargs call for each file cp,
     # but I think it should only do one call with all files
 
-if (( simulationMode )) ; then
+if (( optSimulation )) ; then
       case $st in
         0)  cmd2='echo "StartERR $1"; SomeWrongComand;' ; ;;
         2)  cmd2='echo "ERRORJob $1"; sleep ${st}; echo "What ever was wrong" >&2; exit 1;' ; ;;
@@ -807,7 +809,7 @@ fi
       do
         (( i++ ))
 
-if (( simulationMode )) ; then
+if (( optSimulation )) ; then
         # Using logarithm of file size as sleep time
         # https://stackoverflow.com/a/7962297
         st=$(echo "scale=2; l($size)/l(4)" | bc -l)
@@ -1037,7 +1039,8 @@ processJobList() {
   printf -v txt "%s %s %s %s" "$running" "$stopped" "$waiting" "$busydrv"
 
   info "%s  \r" "${txt:0:(($screenWidth - 2))}"
-  printf "%s\n" "$txt" > "$tmpDir/processStatus"
+  (( optSimulation )) && local simOrNot="${txtBold}* SIMULATION *${txtClean} "
+  printf "%s\n" "$simOrNot$txt" > "$tmpDir/processStatus"
 
   # Let's do some fancy stuff
   local x=("-" "\\" "|" "/")  i="0"
@@ -1194,7 +1197,7 @@ do
 done
 
 OPTIND="1"
-while getopts f:mo:p:r opt
+while getopts f:mo:p:rs opt
 do
   case $opt in
     f)  [[ -f "$OPTARG" ]] || exitError "File not found: $OPTARG"
@@ -1203,6 +1206,7 @@ do
     o)  optExtraCopy="$OPTARG"           ; ;;
     p)  optUserPrio="$OPTARG"            ; ;;
     r)  optRecursive="1"                 ; ;;
+    s)  optSimulation="1"                ; ;;
 
     \?) exitError "Need help? Use: $me -h"  ; ;;
   esac

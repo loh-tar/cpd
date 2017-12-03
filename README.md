@@ -4,11 +4,7 @@ _cpd_ is a pure _bash_ script without any special requirements except a _*NIX Bo
 
 The purpose is collect copy jobs and start them only if the target drive is not busy by an other copy job under _cpd_ supervision.
 
-### Project Status
-
-It's pre release and by default only running in a simulation mode. Instead of calling _cp_ with all job parameter, there will only start a _sleep-job_ with a randomly chosen time of a view seconds.
-
-To change this edit in the source the setting of "simulationMode" from "1" to "0".
+### Project Status is pre release
 
 ### Usage
 
@@ -66,42 +62,44 @@ Process the jobs in the foreground...
 or
     watch -n1 cpd status
 
+### Simulation Mode
+
+Instead of calling _cp_ with all job parameter, there will only start a _sleep/forced-error job_ with a crude chosen time of a few seconds.
+
 ### Running Test
 
     $ ./runTest
     Start with clean tmp dir
 
-    Run: cpd l
+    Run: ./cpd l
     ID PRIO STATUS   SIZE  DRIVE            TARGET                FILES
-      4   3  pending   19K  luks-as2dws34xy  '/media/luks/foo'     'data1'
-      5   3  pending  5,2K  luks-as2dws34xy  '/media/luks/foo'     'secret stuff' 'important data'
-      6   3  pending  2,6K  /dev/sdc         '/media/c/foo'        'cpd' 'cpd1'
-      3   5  pending  6,2K  /dev/sdd         '/media/d/foo'        '/media/data/raz' '/media/data/baz'
-      1   6  pending  7,5K  /dev/sda         '/media/a/foo'        '/media/data/foo'
-      2   7  pending   13K  /dev/sda         '/media/a/foo'        '/media/data/bar'
+      4   3  pending    7K  luks-as2dws34xy  /media/luks/foo       data1
+      5   3  pending    9M  luks-as2dws34xy  /media/luks/foo       secret stuff important data
+      6   3  pending   34K  /dev/sdc         /media/c/foo          cpd cpd1
+      3   5  pending   21K  /dev/sdd         /media/d/foo          /media/data/raz /media/data/baz
+      1   6  pending   705  /dev/sda         /media/a/foo          /media/data/foo
+      2   7  pending    7K  /dev/sda         /media/a/foo          /media/data/bar
 
-    Run: cpd P
-    Start   [  4] [luks-as2dws34xy]    '/media/luks/foo' <- 'data1'
-    Start   [  6] [/dev/sdc       ]       '/media/c/foo' <- 'cpd' 'cpd1'
-    Start   [  3] [/dev/sdd       ]       '/media/d/foo' <- '/media/data/raz' '/media/data/baz'
-    Start   [  1] [/dev/sda       ]       '/media/a/foo' <- '/media/data/foo'
-    Stop    [  4] [luks-as2dws34xy]    '/media/luks/foo' <- 'data1'
-    Start   [  5] [luks-as2dws34xy]    '/media/luks/foo' <- 'secret stuff' 'important data'
-    ERROR   [  3] [/dev/sdd       ]       '/media/d/foo' <- '/media/data/raz' '/media/data/baz'
-    Killed  [  5] [luks-as2dws34xy]    '/media/luks/foo' <- 'secret stuff' 'important data'
-    Killed  [  6] [/dev/sdc       ]       '/media/c/foo' <- 'cpd' 'cpd1'
-    Resume  [  4] [luks-as2dws34xy]    '/media/luks/foo' <- 'data1'
-    Done    [  1] [/dev/sda       ]       '/media/a/foo' <- '/media/data/foo'
-    Start   [  2] [/dev/sda       ]       '/media/a/foo' <- '/media/data/bar'
-    StartERR[  2] [/dev/sda       ]       '/media/a/foo' <- '/media/data/bar'
-    Done    [  4] [luks-as2dws34xy]    '/media/luks/foo' <- 'data1'
+    Run: ./cpd -s P
+    Running a simulation, nothing will copied
+    Start   [  4] [luks-as2dws34xy]      /media/luks/foo <- data1
+    Start   [  6] [/dev/sdc       ]         /media/c/foo <- cpd cpd1
+    Start   [  3] [/dev/sdd       ]         /media/d/foo <- /media/data/raz /media/data/baz
+    Start   [  1] [/dev/sda       ]         /media/a/foo <- /media/data/foo
+    Stop    [  4] [luks-as2dws34xy]      /media/luks/foo <- data1
+    Start   [  5] [luks-as2dws34xy]      /media/luks/foo <- secret stuff important data
+    Killed  [  5] [luks-as2dws34xy]      /media/luks/foo <- secret stuff important data
+    Killed  [  6] [/dev/sdc       ]         /media/c/foo <- cpd cpd1
+    Resume  [  4] [luks-as2dws34xy]      /media/luks/foo <- data1
+    Done    [  1] [/dev/sda       ]         /media/a/foo <- /media/data/foo
+    Start   [  2] [/dev/sda       ]         /media/a/foo <- /media/data/bar
+    Done    [  4] [luks-as2dws34xy]      /media/luks/foo <- data1
+    Done    [  2] [/dev/sda       ]         /media/a/foo <- /media/data/bar
+    Done    [  3] [/dev/sdd       ]         /media/d/foo <- /media/data/raz /media/data/baz
     All done
 
-    Run cpd l e
-    >>>>> Error log of job 2
-    ./cpd: line 587: SomeWrongComand: command not found
-
-    >>>>> Error log of job 3
+    Run: ./cpd l e
+    >>>>> Error log of job 6
     What ever was wrong
 
 **Note:** If there are errors to read, they are features, but you may find true bugs
@@ -110,13 +108,18 @@ or
 
 #### From Source
 
-Copy _cpd_ somewhere to your $PATH and create a symlink there at your taste, e.g. _ln -s cpd cpc_ that's all.
+Copy _cpd_ somewhere to your $PATH and create a symlink there at your taste, e.g.
+
+    ln -s cpd cpc
+
+that's all.
 
 ### TODO
 
   - Add command to view the various log files
   - Improve detection of true target drives
   - BUG: Does not handle filenames with newline
+  - Solution to #6
   - Enhance this list
 
 ### Things they have to wait for a past 1.0 release
