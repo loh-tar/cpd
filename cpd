@@ -438,6 +438,7 @@ getDaemonPid() {
   # Check if daemon is running
   if [[ -f "$tmpDir/daemon-pid" ]] ; then
     daemonPID=$(< "$tmpDir/daemon-pid")
+    [[ -z "$daemonPID" ]] && exitError "FATAL: Empty pid file" # Should never happens
     local pid2=($(ps -C $me -o pid=))
     [[ "${pid2[*]}" =~ "$daemonPID" ]] || exitError "FATAL: Daemon not found" # Should never happens
     return 0
@@ -582,7 +583,7 @@ cmdProcess() {
   checkTmpDir
   cd "$tmpDir"
   set -o monitor
-  trap "recheckJobList=1" USR1 2>/dev/null
+  trap "recheckJobList=1; info '${clearLine}Signaled* New or changed jobs *\n'" USR1 2>/dev/null
   trap "stopRunning=1; info '${clearLine}Received signal to stop, will wait for running jobs\n'" USR2 2>/dev/null
   trap checkChilds CHLD
 
@@ -626,8 +627,8 @@ cmdStartDaemon() {
       # FIXME: This part is almost a copy of cmdProcess,
       # split it into parts/functions to reduce redundancy
       set -o monitor
-      trap "recheckJobList=1" USR1 2>/dev/null
-      trap "stopRunning=1; info '${clearLine}Received signal to stop, will wait for running jobs\n'" USR2 2>/dev/null
+      trap "recheckJobList=1; printf '%(%FT%T)T Signaled* New or changed jobs *\n' '-1'" USR1 2>/dev/null
+      trap "stopRunning=1; printf '%(%FT%T)T Signaled! I have to stop, will wait for running jobs\n' '-1'" USR2 2>/dev/null
       trap checkChilds CHLD
       echo "$$" > "$tmpDir/daemon-pid"
       recheckJobList="1"
