@@ -313,15 +313,12 @@ cmdHelp() {
 #         out "  w, show [c]              Show jobs, c=i by ID, or errors c=e, or job log c=l, daemon status c=s" # TODO
         out "     status                Print status of the daemon and job processing" # DELETE
         out "  l, list [c]              List jobs, c=i by ID, or errors c=e, or the job log c=l" # DELETE
-        out "  K, kill <job-id>         Cancel a pending or kill a running job" # DELETE
-#         out "  k, kill <job>...       Cancel a pending or kill a running job" # TODO
+        out "  K, kill <job>...         Kill a running or cancel a pending job"
         out "  p, prio <prio> <job>...  Change job PRIO to <prio> or 'PRIO=PRIO minus <prio>' if +-<prio>"
-        out "  r, resume <job-id>       Resume a job" # DELETE
-#         out "  r, resume <job>...       Resume a job" # TODO
-        out "  s, stop <job-id>         Stop a job" # DELETE
-#         out "  s, stop <job>...         Stop a job" # TODO
+        out "  r, resume <job>...       Resume jobs"
+        out "  s, stop <job>...         Stop jobs"
         out "  Y, tidy                  Tidy up all job data"
-#         out "  -t                 Tidy up done jobs (TODO)"
+#         out "  y, Tidy                 Tidy up done jobs (TODO)"
         fi
         if [[ $1 == "H" ]] ; then
         out ""
@@ -464,42 +461,62 @@ notifyDaemon() {
 }
 
 cmdKill() {
-  # Need parms: id
-  checkJobId "$1"
+  # Need parms: id...
 
-  if [[ $(getJobValue "$1" "PRIO") == "9" ]] ; then
-    exitError "Job $1 status is: $(getJobValue "$1" "STATUS")"
-  fi
+  setLock || exitError "No jobs killed"
 
-  out "Cancel job $1: $(getJobValue $1 "FILES")"
-  setLock || exitError "Job not canceled"
-  changeStatus "$1" "CANCEL"
+  for jobId ; do
+    if (( $(getJobValue "$jobId" "PRIO") > 7 )) ; then
+      info "Ignore old job: $jobId ($(getJobValue "$jobId" "STATUS"))\n"
+      continue
+    fi
+
+    out "Kill job $jobId: $(getJobValue $1 "FILES")"
+    changeStatus "$jobId" "CANCEL"
+  done
+
   unLock
 
   notifyDaemon
 }
 
 cmdResume() {
-  # Need parms: id
-  checkJobId "$1"
-  checkStatus "$1" "STOPPED" "resume"
+  # Need parms: id...
 
-  out "Resume job $1"
-  setLock || exitError "Job not resumed"
-  changeStatus "$1" "RESUME"
+  setLock || exitError "No jobs resumed"
+
+  for jobId ; do
+    local status="$(getJobValue "$jobId" "STATUS")"
+    if [[ "$status" != "STOPPED" ]] ; then
+      info "Ignore not STOPPED job: $jobId ($status)\n"
+      continue
+    fi
+
+    out "Resume job $jobId"
+    changeStatus "$jobId" "RESUME"
+  done
+
   unLock
 
   notifyDaemon
 }
 
 cmdStop() {
-  # Need parms: id
-  checkJobId "$1"
-  checkStatus "$1" "running" "stop"
+  # Need parms: id...
 
-  out "Stop job $1"
-  setLock || exitError "Job not stopped"
-  changeStatus "$1" "STOPPING"
+  setLock || exitError "No jobs stopped"
+
+  for jobId ; do
+    local status="$(getJobValue "$jobId" "STATUS")"
+    if [[ "$status" != "running" ]] ; then
+      info "Ignore not running job: $jobId ($status)\n"
+      continue
+    fi
+
+    out "Stop job $jobId"
+    changeStatus "$jobId" "STOPPING"
+  done
+
   unLock
 
   notifyDaemon

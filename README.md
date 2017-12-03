@@ -31,10 +31,10 @@ The purpose is collect copy jobs and start them only if the target drive is not 
     P, process               Process jobs in foreground or trigger daemon to continue
        status                Print status of the daemon and job processing
     l, list [c]              List jobs, c=i by ID, or errors c=e, or the job log c=l
-    K, kill <job-id>         Cancel a pending or kill a running job
+    K, kill <job>...         Kill a running or cancel a pending job
     p, prio <prio> <job>...  Change job PRIO to <prio> or 'PRIO=PRIO minus <prio>' if +-<prio>
-    r, resume <job-id>       Resume a job
-    s, stop <job-id>         Stop a job
+    r, resume <job>...       Resume jobs
+    s, stop <job>...         Stop jobs
     Y, tidy                  Tidy up all job data
 
 ### Workflow
