@@ -728,8 +728,9 @@ cmdStatus() {
 
   if [[ -s "$jobFile" ]] ; then
     out "\nJobs by status:"
-    for s in "Pending" "Done" "Canceled" "Killed" "Error"
+    for s in "Running" "Error" "NoStart" "Pending" "Killed" "Canceled" "Done"
     do
+      # Grepping lines like:  1:STATUS:foobar
       local jobCount=$(grep -i "STATUS:$s" "$tmpDir/jobs" | wc -l)
       (( jobCount )) || continue
       local -a jobs=($(grep -i "STATUS:$s" "$tmpDir/jobs" | cut -d: -f1))
