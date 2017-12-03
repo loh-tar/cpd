@@ -304,12 +304,12 @@ cmdHelp() {
         else
         out "  h, help [c]              Show less help or when c=l License, c=s Source of ${txtBold}$me${txtClean}"
         out "  H                        Show this help"
+        fi
         out "     newjob <arguments>    Enqueue a new job with arguments as shown above"
         out "     start                 Start the daemon and job processing"
         out "  X, exit                  Terminate the daemon and job processing"
         out "  P, process               Process jobs in foreground or trigger daemon to continue"
 #         out "  P, process               Process jobs in foreground" TODO
-        fi
         out "  K, kill <job>...         Kill a running or cancel a pending job"
         out "  p, prio <prio> <job>...  Change job PRIO to <prio> or 'PRIO=PRIO minus <prio>' if +-<prio>"
         out "  r, resume <job>...       Resume jobs"
@@ -338,10 +338,10 @@ cmdHelp() {
         out ""
         out "${txtBold}Examples:${txtClean}"
         if (( ! isAlterEgo )) ; then
-        out "  Enqueue new copy task"
+        out "  Enqueue new job"
         out "    $me new /media/1a/foo *"
         out ""
-        out "  Enqueue new copy task, assumed you have a symlink $alterEgo->$me"
+        out "  Enqueue new job, assumed you have a symlink $alterEgo->$me"
         else
         out "    $alterEgo /media/1a/foo *"
         fi
