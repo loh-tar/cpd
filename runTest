@@ -3,39 +3,60 @@
 type=${1:-"small"}
 cpdDir="/tmp/cpd/user-$(id -un)"
 
-if ! ./cpd status|grep -q "Simulation mode" ; then
-  echo "No active simulation mode - no testing"
-  exit 1
-fi
-
-if [[ -f $cpdDir/daemon-pid ]] ; then
-  echo "There is a running daemon"
-  echo "Will not destroy tmp dir"
-  cp ./testData/$type/{jobs,next-id} $cpdDir/
-else
-  echo "Start with clean tmp dir"
+prepareTest() {
+  echo "Prepare test with clean tmp dir"
   rm -rf $cpdDir/
   mkdir -p $cpdDir/
   cp ./testData/$type/{jobs,next-id,not-locked,job-files-*} $cpdDir/
+}
+
+if [[ -f $cpdDir/daemon-pid ]] ; then
+  echo "There is a running daemon - will expel the beast"
+  if ./cpd exit ; then
+    echo "Puh, Good!"
+  else
+    echo "Um? Well, I ignore this in the hope that you know what you are doing"
+    # Just to be sure all are gone
+    sleep 1
+    killall cpd
+  fi
+  prepareTest
+  optWatch="1"
+#   echo "Read quick! Ctrl-C to stop watching"
+#   sleep 1
+  ./cpd -s start
+else
+  prepareTest
 fi
 
+runUser() {
+  echo "User $@" >> "$cpdDir/test.log"
+  "$@" >> "$cpdDir/test.log" 2>&1
+}
 
-( sleep 1
-  ./cpd s 4 >/dev/null 2>&1
-  ./cpd K 5 >/dev/null 2>&1
-  ./cpd K 6 >/dev/null 2>&1
-  sleep 2
-  ./cpd r 4 >/dev/null 2>&1
-)& >/dev/null 2>&1
+runCommand() {
+  echo
+  echo "Run: $@" | tee -a "$cpdDir/test.log"
+  "$@" | tee -a "$cpdDir/test.log"
+}
 
-echo
-echo "Run: cpd l"
-./cpd l
+(
+  runUser sleep 1
+  runUser ./cpd K 5
+  runUser ./cpd s 4 6 3
+  runUser sleep 1
+  runUser ./cpd K 5 6
+  runUser sleep 2
+  runUser ./cpd r 4 6 3
+)&
 
-echo
-echo "Run: cpd P"
-./cpd P
+if (( optWatch )) ; then
+watch -n1 ./cpd status
+runCommand ./cpd status
+else
+runCommand ./cpd list
+runCommand ./cpd -s process
+runCommand ./cpd list e
+fi
 
-echo
-echo "Run cpd l e"
-./cpd l e
+echo "Logfile of this test? Try: cat $cpdDir/test.log"
