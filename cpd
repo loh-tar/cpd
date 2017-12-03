@@ -325,6 +325,7 @@ cmdHelp() {
         out "  • Calling $me with any other name than ${txtBold}$me${txtClean}" \
                 "forces to run as if ${txtBold}newjob${txtClean} was given"
         out "  • The ${txtBold}<command>${txtClean} is fuzzy recognized by any parts of its long name"
+        out "  • Short commands which take an argument can written without a space, handy huh?"
         out "  • The job priority is not static. Lower numbers have a higher priority"
         out "    Jobs started in order of priority and enqueue time. 0-2(active), 8+9(old) are intern used"
         out "  • ${txtBold}exit${txtClean} stops job processing, if so, or stops the daemon at all, if not"
@@ -351,7 +352,7 @@ cmdHelp() {
         out ""
         out "  Take a look how it is going"
         out "    watch -n1 $me w"
-        out "    watch -n1 $me w s"
+        out "    watch -n1 $me ws"
         fi
         fi
     ;;
@@ -1236,13 +1237,23 @@ cmd="$1"; shift
 
 if   [[ "H"               == "$cmd" ]] ; then cmdHelp "H"
 elif [[ "h"               == "$cmd" ]] ; then cmdHelp "$@"
+elif [[ "hl"              == "$cmd" ]] ; then cmdHelp "l"
+elif [[ "hs"              == "$cmd" ]] ; then cmdHelp "s"
 elif [[ "K"               == "$cmd" ]] ; then cmdKill "$@"
+elif [[ "$cmd"          =~ K[1-9]+$ ]] ; then cmdKill "${cmd:1}" "$@"
 elif [[ "P"               == "$cmd" ]] ; then cmdProcess
 elif [[ "Y"               == "$cmd" ]] ; then cmdTidy
 elif [[ "p"               == "$cmd" ]] ; then cmdChangePrio "$@"
+elif [[ "$cmd"     =~ p[+-]?[1-9]?$ ]] ; then cmdChangePrio "${cmd:1}" "$@"
 elif [[ "r"               == "$cmd" ]] ; then cmdResume "$@"
+elif [[ "$cmd"          =~ r[1-9]+$ ]] ; then cmdResume "${cmd:1}" "$@"
 elif [[ "s"               == "$cmd" ]] ; then cmdStop "$@"
+elif [[ "$cmd"          =~ s[1-9]+$ ]] ; then cmdStop "${cmd:1}" "$@"
 elif [[ "w"               == "$cmd" ]] ; then cmdShow "$@"
+elif [[ "we"              == "$cmd" ]] ; then cmdShow "e"
+elif [[ "wi"              == "$cmd" ]] ; then cmdShow "i"
+elif [[ "wl"              == "$cmd" ]] ; then cmdShow "l"
+elif [[ "ws"              == "$cmd" ]] ; then cmdShow "s"
 elif [[ "x"               == "$cmd" ]] ; then cmdExit
 elif (( ${#cmd} == 1 )) ; then exitError "Unknown short command: $cmd"
 elif [[ "exit"            =~ "$cmd" ]] ; then cmdExit
