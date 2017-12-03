@@ -306,7 +306,7 @@ cmdHelp() {
         out "  H                        Show this help"
         out "     newjob <arguments>    Enqueue a new job with arguments as shown above"
         out "     start                 Start the daemon and job processing"
-        out "  x, exit                  Terminate the daemon and job processing"
+        out "  X, exit                  Terminate the daemon and job processing"
         out "  P, process               Process jobs in foreground or trigger daemon to continue"
 #         out "  P, process               Process jobs in foreground" TODO
         fi
@@ -1254,7 +1254,7 @@ elif [[ "we"              == "$cmd" ]] ; then cmdShow "e"
 elif [[ "wi"              == "$cmd" ]] ; then cmdShow "i"
 elif [[ "wl"              == "$cmd" ]] ; then cmdShow "l"
 elif [[ "ws"              == "$cmd" ]] ; then cmdShow "s"
-elif [[ "x"               == "$cmd" ]] ; then cmdExit
+elif [[ "X"               == "$cmd" ]] ; then cmdExit
 elif (( ${#cmd} == 1 )) ; then exitError "Unknown short command: $cmd"
 elif [[ "exit"            =~ "$cmd" ]] ; then cmdExit
 elif [[ "kill"            =~ "$cmd" ]] ; then cmdKill "$@"

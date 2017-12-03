@@ -27,7 +27,7 @@ The purpose is collect copy jobs and start them only if the target drive is not 
     H                        Show this help
        newjob <arguments>    Enqueue a new job with arguments as shown above
        start                 Start the daemon and job processing
-    x, exit                  Terminate the daemon and job processing
+    X, exit                  Terminate the daemon and job processing
     P, process               Process jobs in foreground or trigger daemon to continue
     K, kill <job>...         Kill a running or cancel a pending job
     p, prio <prio> <job>...  Change job PRIO to <prio> or 'PRIO=PRIO minus <prio>' if +-<prio>
