@@ -86,6 +86,22 @@ exitError() {
   exit 1
 }
 
+printFile() {
+  local sw="$screenWidth"
+  (( sw < 1 )) && sw="9999"
+
+  if [[ -t 1 ]] ; then
+    cut "-c-$sw" "$@" 2>/dev/null
+  else
+    # Because I like to keep my highlighted stuff in the daemon log, I remove
+    # these colors now when running e.g. in a pipe. Yeah, sounds pretty stupid...
+
+    # Thanks Luke, the force is with you
+    # https://stackoverflow.com/a/24005600
+    sed -r 's/\x1b\[[0-9;]*m?//g' "$@" 2>/dev/null | cut "-c-$sw"
+  fi
+}
+
 checkTmpDir() {
   [[ -d "$tmpDir" ]] && return
 
@@ -389,13 +405,13 @@ outJobLine() {
 showStatus() {
   if getDaemonPid ; then
     out "Daemon is running with pid $daemonPID"
-    cut "-c-$screenWidth" "$tmpDir/processStatus" 2>/dev/null
+    printFile "$tmpDir/processStatus"
     # Thanks to Daniel
     # https://unix.stackexchange.com/a/325581
     if compgen -G "$tmpDir/job-status-*" > /dev/null; then
       out ""
       out "Running jobs:"
-      cut "-c-$screenWidth" "$tmpDir"/job-status-* 2>/dev/null
+      printFile "$tmpDir"/job-status-*
     fi
   else
     out "No running daemon"
@@ -433,13 +449,13 @@ cmdShow() {
       do
         [[ -s "$tmpDir/error.log-job-$id" ]] || continue
         out ">>>>> Error log of job $id"
-        cat "$tmpDir/error.log-job-$id"
+        printFile "$tmpDir/error.log-job-$id"
         out ""
       done
       ;;
 
     l|-ll)
-      cat "$tmpDir/job.log"
+      printFile "$tmpDir/job.log"
       ;;
 
     NoJobs)
@@ -774,7 +790,7 @@ cmdExit() {
 
   if [[ -f "$tmpDir/daemon-pid" ]] ; then
     info " - is still running\n"
-    cut "-c-$screenWidth" "$tmpDir/processStatus" 2>/dev/null
+    printFile "$tmpDir/processStatus"
     exit 1
   else
     info " - OK\n"
