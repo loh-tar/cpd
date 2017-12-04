@@ -51,12 +51,13 @@ runCommand() {
 )&
 
 if (( optWatch )) ; then
-watch -n1 ./cpd status
-runCommand ./cpd status
+  watch -n1 ./cpd show
+  # After Ctrl-C watch the info is gone, so bring it back
+  runCommand ./cpd show
 else
-runCommand ./cpd list
-runCommand ./cpd -s process
-runCommand ./cpd list e
+  runCommand ./cpd show
+  runCommand ./cpd -s process
+  runCommand ./cpd show e
 fi
 
 echo "Logfile of this test? Try: cat $cpdDir/test.log"
