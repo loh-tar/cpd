@@ -40,6 +40,7 @@ declare    optExtraCopy=""
 declare    optSourceList=""
 declare    optUserPrio="0"
 declare    optIdleTime="600"
+declare    optStartDaemon="0"
 
 declare -r tmpDir="/tmp/$me/user-$(id -un)"
 declare -r jobFile="$tmpDir/jobs"               # All jobs as key/value
@@ -298,9 +299,10 @@ cmdHelp() {
         out "  -o <cp-opt>              Add <cp-opt> to the called cp command. Disables -r/-m if given"
         out "  -p <user-prio>           Enqueue job with modified default priority. PRIO=6 minus <user-prio>"
         out "  -r                       Copy recursive. Ignored if -o is given"
-        if (( ! isAlterEgo )) ; then
         out "  -i <idle-time>           Daemon stand by time in seconds, default=600, unlimited=-1"
         out "  -s                       Run a simulation, copy nothing"
+        out "  -a                       Auto start the daemon if not already running"
+        if (( ! isAlterEgo )) ; then
         [[ $1 == "H" ]] && out ""
         out "${txtBold}Commands:${txtClean}"
         if [[ $1 == "h" ]] ; then
@@ -498,6 +500,11 @@ notifyDaemon() {
   if getDaemonPid ; then
     kill -USR1 "$daemonPID"
     return 0
+  elif (( optStartDaemon )) ; then
+    cmdStartDaemon
+    # Give daemon a little time to come up and give user a clean prompt
+    sleep 1; echo
+    return 0
   else
     # info "Hint: No running daemon\n"
     return 1
@@ -652,7 +659,7 @@ cmdProcess() {
 cmdStartDaemon() {
   # Thanks to Mike S
   # https://stackoverflow.com/a/29107686
-  local meFullPath=$(which ${BASH_SOURCE[0]})
+  local meFullPath=$(readlink -e ${BASH_SOURCE[0]})
 
   case "$1" in
     DAEMON) # 3. doomed
@@ -1103,7 +1110,7 @@ processJobList() {
 }
 
 cmdNewJob() {
-  [[ -d "$1" ]] || exitError "Destination must be a directory"
+  [[ -d "$1" ]] || exitError "Destination is not a directory: $1"
   check4PosInteger "$optUserPrio"
   (( optUserPrio > 3 )) && { info "Adjust <user-prio> to 3\n"; optUserPrio="3"; }
 
@@ -1247,9 +1254,10 @@ do
 done
 
 OPTIND="1"
-while getopts f:i:mo:p:rs opt
+while getopts af:i:mo:p:rs opt
 do
   case $opt in
+    a)  optStartDaemon="1"               ; ;;
     f)  [[ -f "$OPTARG" ]] || exitError "File not found: $OPTARG"
         optSourceList="$OPTARG"          ; ;;
     i)  check4Integer "$OPTARG"

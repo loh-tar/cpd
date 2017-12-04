@@ -22,6 +22,7 @@ The purpose is collect copy jobs and start them only if the target drive is not 
     -r                       Copy recursive. Ignored if -o is given
     -i <idle-time>           Daemon stand by time in seconds, default=600, unlimited=-1
     -s                       Run a simulation, copy nothing
+    -a                       Auto start the daemon if not already running
 
 ### Commands are:
 
