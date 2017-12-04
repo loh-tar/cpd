@@ -20,11 +20,13 @@ The purpose is collect copy jobs and start them only if the target drive is not 
     -o <cp-opt>              Add <cp-opt> to the called cp command. Disables -r/-m if given
     -p <user-prio>           Enqueue job with modified default priority. PRIO=6 minus <user-prio>
     -r                       Copy recursive. Ignored if -o is given
+    -i <idle-time>           Daemon stand by time in seconds, default=600, unlimited=-1
+    -s                       Run a simulation, copy nothing
 
 ### Commands are:
 
-    h, help [c]              Show less help or when c=l License, c=s Source of cpd
-    H                        Show this help
+    h, help [c]              Show this help or when c=l License, c=s Source of cpd
+    H                        Show more help
        newjob <arguments>    Enqueue a new job with arguments as shown above
        start                 Start the daemon and job processing
     X, exit                  Terminate the daemon and job processing

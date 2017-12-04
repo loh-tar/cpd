@@ -19,7 +19,7 @@
 #   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
 #   MA 02110-1301, USA.
 
-declare -r version="0.1pre8"
+declare -r version="0.1pre9"
 declare -r vDate="Dez 2017"
 
 declare -r me=$(basename $(readlink -e $0 ))
@@ -39,6 +39,7 @@ declare    optNoProgress="0"
 declare    optExtraCopy=""
 declare    optSourceList=""
 declare    optUserPrio="0"
+declare    optIdleTime="600"
 
 declare -r tmpDir="/tmp/$me/user-$(id -un)"
 declare -r jobFile="$tmpDir/jobs"               # All jobs as key/value
@@ -46,7 +47,7 @@ declare -r jobList="$tmpDir/joblst"             # Subset of jobFile as handy tab
 declare -A jobData=()                           # Will filled with data of jobFile
 declare -A jobPids=()                           # PIDs of our jobs by our own ID
 declare    recheckJobList="0"                   # Set to 1 when some job has finished
-declare    stopRunning="0"                      # Set to 1 by command '-D -'
+declare    stopRunning="0"                      # Set to 1 by command 'exit'
 declare    screenWidth="100"                    # Will adjusted by setScreenWidth()
 declare    daemonPID="0"                        # Used to notify/check our Daemon
 
@@ -96,6 +97,10 @@ checkTmpDir() {
 
 check4PosInteger() {
   [[ "$1" =~ ^[0-9]+$ ]] || exitError "Not a positive integer: $1"
+}
+
+check4Integer() {
+  [[ "$1" =~ ^-?[0-9]+$ ]] || exitError "Not my kind of integer: $1"
 }
 
 isDelta() {
@@ -294,7 +299,8 @@ cmdHelp() {
         out "  -p <user-prio>           Enqueue job with modified default priority. PRIO=6 minus <user-prio>"
         out "  -r                       Copy recursive. Ignored if -o is given"
         if (( ! isAlterEgo )) ; then
-        out "  -s                       Run a simulation, copy nothing. Affect only process & start"
+        out "  -i <idle-time>           Daemon stand by time in seconds, default=600, unlimited=-1"
+        out "  -s                       Run a simulation, copy nothing"
         [[ $1 == "H" ]] && out ""
         out "${txtBold}Commands:${txtClean}"
         if [[ $1 == "h" ]] ; then
@@ -322,26 +328,27 @@ cmdHelp() {
         out ""
         out "${txtBold}Notes:${txtClean}"
         if (( ! isAlterEgo )) ; then
-        out "  • Calling $me with any other name than ${txtBold}$me${txtClean}" \
+        out "  • Calling $me with any ${txtBold}other name${txtClean} than ${txtBold}$me${txtClean}" \
                 "forces to run as if ${txtBold}newjob${txtClean} was given"
         out "  • The ${txtBold}<command>${txtClean} is fuzzy recognized by any parts of its long name"
-        out "  • Short commands which take an argument can written without a space, handy huh?"
-        out "  • The job priority is not static. Lower numbers have a higher priority"
-        out "    Jobs started in order of priority and enqueue time. 0-2(active), 8+9(old) are intern used"
+        out "  • Short commands which take an argument can written without a space, ${txtBold}handy huh?${txtClean}"
+        out "  • The job ${txtBold}PRIO${txtClean} is not static. Lower numbers have a higher priority"
+        out "    - Jobs started in order of PRIO and ${txtBold}enqueue time${txtClean}"
+        out "    - Intern used is: 0 need attention, 1 running, 2 stopped, 8 error/killed, 9 done"
         out "  • ${txtBold}exit${txtClean} stops job processing, if so, or stops the daemon at all, if not"
-        out "    Adding a new job trigger the daemon to continue job processing, there is no blocking"
-        out "  • ${txtBold}tidy${txtClean} does nothing else than 'rm -rf $tmpDir'"
-        out "  • With -s will only run a sleep/forced-error job with a crude chosen time of a few seconds."
+        out "    - Adding a new job trigger the daemon to continue job processing, there is no blocking"
+        out "  • ${txtBold}tidy${txtClean} does nothing else than ${txtBold}'rm -rf $tmpDir'${txtClean}"
+        out "  • With ${txtBold}-s${txtClean} will only run a sleep/forced-error job with a crude chosen time of a few seconds."
         fi
         out "  • Enclose ${txtBold}<cp-opt>${txtClean} in quotes if you need more than one option"
-        out "  • New jobs have prio 6 unless -p was given"
+        out "  • New jobs have prio 6 unless ${txtBold}-p${txtClean} was given"
         out ""
         out "${txtBold}Examples:${txtClean}"
         if (( ! isAlterEgo )) ; then
-        out "  Enqueue new job"
+        out "  Enqueue a new job"
         out "    $me new /media/1a/foo *"
         out ""
-        out "  Enqueue new job, assumed you have a symlink $alterEgo->$me"
+        out "  Enqueue a new job, assumed you have a symlink $alterEgo->$me"
         else
         out "    $alterEgo /media/1a/foo *"
         fi
@@ -349,6 +356,9 @@ cmdHelp() {
         out "    $alterEgo /media/1c/foo < /path/to/list-of-files"
         out "    find * -type f -print | $alterEgo -p2 /media/1d/foo"
         if (( ! isAlterEgo )) ; then
+        out ""
+        out "  Start the daemon in simulation mode with no stand by time, will exit when all is done"
+        out "    $me -si0 start"
         out ""
         out "  Take a look how it is going"
         out "    watch -n1 $me w"
@@ -654,6 +664,17 @@ cmdStartDaemon() {
       printf "%(%FT%T)T $me daemon started with pid $$\n" "-1"
       (( optSimulation )) && printf "*\n* Running in simulation mode, nothing will copied\n*\n"
 
+      local txt="Idle time is"
+      local sleepTime="1"
+      if   (( optIdleTime == 0)) ; then
+        local kickMe=" - will terminate immediately"
+      elif (( optIdleTime < 0 )) ; then
+        local kickMe=" - will not get out without a kick"
+        optIdleTime="-1"  # Overwrite maybe lower user numbers
+        sleepTime="5"     # Relieve a little the system :-)
+      fi
+      printf "%(%FT%T)T %s %ss %s\n" "-1" "$txt" "$optIdleTime" "$kickMe"
+
       # Mike suggest to run a daemon in / but I think that should be ok
       cd "$tmpDir"
 
@@ -666,31 +687,43 @@ cmdStartDaemon() {
       echo "$$" > "$tmpDir/daemon-pid"
       recheckJobList="1"
 
-      # FIXME: Improve sleep state and communication with daemon.
-      # Read from socket or something instead only to trigger/trap and
-      # running pointless every a view seconds only to catch the trap.
-      # Or perhaps by kill -STOP yourself someway
-      local i="0"
-      while (( ! stopRunning && i < 60 )) # Finish after ~10min, see sleep 10
+      local i="1"
+      local boredTime=$(bc <<< "scale=0; $optIdleTime / 1.3")
+      while (( ! stopRunning && i != 0 ))
       do
+
+        (( recheckJobList )) && printf "%(%FT%T)T Go to work\n" "-1"
 
         while (( recheckJobList ))
         do
           (( ! ${#jobPids[*]} && stopRunning )) && break
-          printf "%(%FT%T)T Go to work\n" "-1"
           processJobList
-          i="0"
+          i="$optIdleTime"
         done
 
+        # We want not fill the log with too much alive notes, but a little fun is welcome
+        if (( i == optIdleTime )) ; then
+          printf "%(%FT%T)T %s%s\n" "-1" "Gone idle" "$kickMe" >> "$tmpDir/processStatus"
+          printf "%(%FT%T)T Gone idle\n" "-1" # Logfile
+        elif (( i < 0 )) ; then
+          let i=-1
+        elif (( i < boredTime )) ; then
+          head -n1 "$tmpDir/processStatus" > "$tmpDir/processStatus-$$"
+          printf "%(%FT%T)T It's so boring...%s\n" "-1"  "$i" \
+                  >> "$tmpDir/processStatus-$$"
+          mv "$tmpDir/processStatus-$$" "$tmpDir/processStatus"
+        fi
+
+        # BUG Improve communication with daemon. Read from FIFO or something
+        # instead. Now, if the signal arrives just short before we set these
+        # variables the info is lost. Happens rarely but, if it is ugly
         stopRunning="0"
         recheckJobList="0"
-        printf "%(%FT%T)T Sleep\n" "-1"
-        sleep 10 # Don't sleep to long, but long enough not to bother
-        printf "%(%FT%T)T Wakeup\n" "-1"
-        (( i++ ))
+        sleep $sleepTime
+        (( optIdleTime != 0 )) && (( i-- ))
       done
 
-      printf "%(%FT%T)T Exit with pid $$\n" "-1"
+      printf "%(%FT%T)T Good bye and have a nice day\n" "-1"
       rm "$tmpDir/daemon-pid"
     ;;
 
@@ -698,7 +731,7 @@ cmdStartDaemon() {
       # umask 0 # Mike does this, but for now we don't want a daemon running
                 # as an other user than the caller (?)
       (( optSimulation )) && local simOrNot="-s"
-      $meFullPath $simOrNot start DAEMON  >/dev/null 2>/dev/null </dev/null &
+      $meFullPath $simOrNot -i $optIdleTime start DAEMON  >/dev/null 2>/dev/null </dev/null &
       # FIXME: Print to tty like Mike, No \n, for now
       info "$me daemon started with pid $!"
     ;;
@@ -709,7 +742,7 @@ cmdStartDaemon() {
         info "Start daemon in simulation mode, nothing will copied\n"
         local simOrNot="-s"
       fi
-      setsid $meFullPath $simOrNot start BANISHMENT  &
+      setsid $meFullPath $simOrNot -i $optIdleTime start BANISHMENT  &
     ;;
   esac
 }
@@ -1214,11 +1247,13 @@ do
 done
 
 OPTIND="1"
-while getopts f:mo:p:rs opt
+while getopts f:i:mo:p:rs opt
 do
   case $opt in
     f)  [[ -f "$OPTARG" ]] || exitError "File not found: $OPTARG"
         optSourceList="$OPTARG"          ; ;;
+    i)  check4Integer "$OPTARG"
+        optIdleTime="$OPTARG"            ; ;;
     m)  optMerge="1"                     ; ;;
     o)  optExtraCopy="$OPTARG"           ; ;;
     p)  optUserPrio="$OPTARG"            ; ;;
@@ -1233,7 +1268,8 @@ shift $(( $OPTIND - 1 ))
 
 (( isAlterEgo )) && { cmdNewJob "$@"; exit 0; }
 
-cmd="$1"; shift
+# Catch some funny guys
+(( $# )) && { cmd="$1"; shift; } || cmd="h"
 
 if   [[ "H"               == "$cmd" ]] ; then cmdHelp "H"
 elif [[ "h"               == "$cmd" ]] ; then cmdHelp "$@"
