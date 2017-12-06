@@ -15,6 +15,7 @@ The purpose is collect copy jobs and start them only if the target drive is not 
 
 ### Options are:
 
+    -c <cols>                Force output to cut at <cols>, 0 or negative=no cut
     -f <file>                Read list of source files from <file>
     -m                       Merge all files in <dest-dir>. Ignored if -o is given
     -o <cp-opt>              Add <cp-opt> to the called cp command. Disables -r/-m if given

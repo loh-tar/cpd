@@ -41,6 +41,7 @@ declare    optSourceList=""
 declare    optUserPrio="0"
 declare    optIdleTime="600"
 declare    optStartDaemon="0"
+declare    optForcedScreenSize="0"
 
 declare -r tmpDir="/tmp/$me/user-$(id -un)"
 declare -r jobFile="$tmpDir/jobs"               # All jobs as key/value
@@ -49,11 +50,11 @@ declare -A jobData=()                           # Will filled with data of jobFi
 declare -A jobPids=()                           # PIDs of our jobs by our own ID
 declare    recheckJobList="0"                   # Set to 1 when some job has finished
 declare    stopRunning="0"                      # Set to 1 by command 'exit'
-declare    screenWidth="100"                    # Will adjusted by setScreenWidth()
+declare    screenWidth="0"                      # Will adjusted by setScreenWidth()
 declare    daemonPID="0"                        # Used to notify/check our Daemon
 
 # Colored text and other escape sequences
-# FIXME: Add test if terminal is capable of colored output or if output goes to file/pipe
+# FIXME: Add test if terminal is capable of colored output
 declare    txtBold=$'\e[1m'                     # Or bright, depend on your terminal
 declare    txtClean=$'\e[0m'                    # All attributes off
 declare    clearLine=$'\e[2K'                   # Äh, yes
@@ -62,8 +63,98 @@ declare    oneLineUp=$'\e[1A'                   # Need more lines? 3A=three line
 #
 # Helper Functions
 #
+fitToScreen() {
+  # Need parms: fileDescriptor textToCut
+
+  # I have no clue if there is an easier way to achieve this what here is done,
+  # but I like it currently, just because it's build on my own and works nicely.
+  # This is not enough: txt=$(cut -c-$screenWidth <<< $txt)
+  # It was fun to solve this problem, just as cpd as a whole
+
+  local inTerminal="0"
+  local -n txt="$2"
+  local txtWidth="${#txt}"
+  local copy
+
+  stripMost() {
+    # Strip all stuff which not affect the display length
+    copy="$txt"
+    copy="${copy//[$'\r']}"                       # No tab handling, sorry
+    copy="${copy//${clearLine}}"
+
+#   This way works, but if we have many colors it would be annoying all to list
+#   copy="${copy//${txtBold}}"
+#   copy="${copy//${txtClean}}"
+#   ...
+#   FIXME That's why I tried to do it like Luke in printFile and sed, but didn't got it perfect
+#   copy="${copy//$'\e['[0-9]*m?}"  # Removes first colored char of word
+#   copy="${copy//$'\e['[0-9]+m?}"  # No effect
+#   copy="${copy//$'\e['[0-9]*m}"   # Removes complete colored word
+    copy="${copy//$'\e['[0-9]m}"    # Works but would not catch two numbered colors like colRed=$'\e[31m'
+
+    txtWidth="${#copy}"
+  }
+
+  stripRest() {
+    copy="${copy//[$'\n']}"
+    txtWidth="${#copy}"
+  }
+
+  if [[ ! -t "$1" ]] ; then
+    # Remove colors when output is piped
+    stripMost
+    txt="$copy"
+    # Anyway cut to screen, except if set to < 0 or we have no clue about the screen
+    # Using tilde as hint char because of no colors it looks not so confusing
+    (( screenWidth < txtWidth && screenWidth > 0 )) && txt="${txt:0:${screenWidth}-1}~"
+    return
+  fi
+
+  (( screenWidth < 1 ))         && return       # Unknown screen/forced cut option, nothing todo
+  (( screenWidth >= txtWidth )) && return       # Nothing todo
+
+  stripMost; stripRest
+
+  (( screenWidth >= txtWidth )) && return       # Gotcha! Still nothing todo
+
+  # Save some special line end
+  local completion=""
+  [[ "$txt" =~ [$'\n\r']$ ]] && completion="${txt: -1}"
+  overmuch="${copy:${screenWidth}-1}"           # One less for the later hint char '>'
+
+  # Cutting is very tricky due to possible included escape sequences
+  local cutted
+  while : ; do
+    cutted="${txt/%${overmuch}}"                # Try to cut from the end
+    (( ${#cutted} < ${#txt} )) && break         # Bingo!
+    # Cut one char from our piece of overmuch
+    overmuch="${overmuch:0: -1}"
+    # Cut one char from our message too
+    txt="${txt:0: -1}"
+    (( ${#overmuch} == 0 )) && break            # Nothing left, we are done
+    # Now the tricky part, cut message as long the last char of both not match!
+    while [[ "${overmuch: -1}" != "${txt: -1}" ]] ; do txt="${txt:0: -1}"; done
+  done
+
+  # Paste a highlighted hint to the cropped txt
+  txt="${cutted}${txtBold}>${txtClean}${completion}"
+}
+
+write() {
+  # Need parms: fileDescriptor [format] text
+  local fd="$1"; shift
+  local format="%b"
+  (( $# > 1 )) && { format="$1"; shift; }
+  local msg
+
+  printf -v msg "$format" "$@"
+  fitToScreen $fd msg
+  printf "%s" "$msg"
+}
+
 out() {
-  printf "$*\n"
+  write "1" "$@"
+  printf "\n"
 }
 
 error() {
@@ -71,9 +162,7 @@ error() {
 }
 
 info() {
-  local format="$1"
-  shift
-  printf "$format" "$@" >&2
+  write "2" "$@" >&2
 }
 
 exitGood() {
@@ -251,11 +340,9 @@ readJobs() {
 }
 
 setScreenWidth() {
+  (( optForcedScreenSize )) && return
+  (( COLUMNS )) && { screenWidth="$COLUMNS"; return; }
   screenWidth=$(stty size 2>/dev/null |cut -d' ' -f2)
-  # If stty has no success, e.g. running as daemon, in a pipe or some
-  # dumb terminal, ensure not all is cut from output
-  # https://github.com/loh-tar/cpd/issues/4
-  (( screenWidth )) || screenWidth="9999"
 }
 
 cutLeft() {
@@ -308,6 +395,7 @@ cmdHelp() {
         out "  -f <file>                Read list of source files from <file>"
         if [[ $1 == "H" ]] ; then
         out "  -h                       Print less help"
+        out "  -c <cols>                Force output to cut at <cols>, 0 or negative=no cut"
         else
         out "  -H                       Print more help"
         fi
@@ -399,7 +487,7 @@ outJobLine() {
     "${jobData["$id:SIZE"]}" "${jobData["$id:DRIVE"]}"        \
     "$target" "${jobData["$id:FILES"]}"
 
-  out "${txt:0:$screenWidth}"
+  out "$txt"
 }
 
 showStatus() {
@@ -469,7 +557,7 @@ cmdShow() {
     *)
       local txt=" ID PRIO STATUS   SIZE  DRIVE            TARGET                FILES"
       local format="%3s   %s  %-8s %4s  %-15s  %-20s  %s"
-      out "${txt:0:$screenWidth}"
+      out "$txt"
       readJobs
       ;;&
 
@@ -1004,7 +1092,7 @@ procInfo() {
   printf -v txt "$format" "$2" "$1" "${jobData["$1:DRIVE"]}" \
                 "$target" "${jobData["$1:FILES"]}"
 
-  info "%s\n" "$clearLine${txt:0:$screenWidth}"
+  info "%s\n" "$clearLine$txt"
 }
 
 checkChilds() {
@@ -1110,7 +1198,7 @@ processJobList() {
   printf -v waiting "[Waiting: %s]" "${waitingJobs[*]}"
   printf -v txt "%s %s %s %s" "$running" "$stopped" "$waiting" "$busydrv"
 
-  info "%s  \r" "${txt:0:(($screenWidth - 2))}"
+  info "%s\r" "$txt"
   (( optSimulation )) && local simOrNot="${txtBold}* SIMULATION *${txtClean} "
   printf "%s\n" "$simOrNot$txt" > "$tmpDir/processStatus"
 
@@ -1212,7 +1300,7 @@ cmdNewJob() {
   local total=$(numfmt --to=si $bytes)
   local bytesPerFile=$(( bytes / count ))
 
-  out "New job: $newId - PRIO $(( 6 - optUserPrio ))" \
+  out "%s" "New job: $newId - PRIO $(( 6 - optUserPrio )) " \
       "($count files, $total total, $(numfmt --to=si $bytesPerFile) avg size)"
   out "Target : $target"
   out "Files  : ${files}"
@@ -1253,15 +1341,24 @@ cmdNewJob() {
 # Begin Main
 #
 
+# This cut the help output too, not what someone may endorse, but it show so
+# lovely how nice the new cutting works ;-p
+setScreenWidth
+
 # Hint the user how to use me when called without argument
 [ "$#" -eq "0"  ] && set -- "-h"
 
-while getopts :Hh opt # Keep help recognition away from other options
+while getopts :Hhc: opt # Keep help recognition away from other options
 do
   case $opt in
     h)  if   [[ "-hl" == $1 || "l" == $2 ]] ; then opt="l"
         elif [[ "-hs" == $1 || "s" == $2 ]] ; then opt="s"; fi; ;;
     H) : ; ;;
+    c)  optForcedScreenSize="1"
+        check4Integer "$OPTARG"
+        screenWidth="$OPTARG"
+        continue; ;;
+
     *)  continue; ;;
   esac
 
@@ -1270,7 +1367,7 @@ do
 done
 
 OPTIND="1"
-while getopts af:i:mo:p:rs opt
+while getopts ac:f:hi:mo:p:rs opt
 do
   case $opt in
     a)  optStartDaemon="1"               ; ;;
