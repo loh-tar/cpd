@@ -15,15 +15,16 @@ The purpose is collect copy jobs and start them only if the target drive is not 
 
 ### Options are:
 
+    -a                       Auto start the daemon if not already running
     -c <cols>                Force output to cut at <cols>, 0 or negative=no cut
     -f <file>                Read list of source files from <file>
-    -m                       Merge all files in <dest-dir>. Ignored if -o is given
+    -i <idle-time>           Daemon stand by time in seconds, default=600, unlimited=-1
     -o <cp-opt>              Add <cp-opt> to the called cp command. Disables -r/-m if given
     -p <user-prio>           Enqueue job with modified default priority. PRIO=6 minus <user-prio>
-    -r                       Copy recursive. Ignored if -o is given
-    -i <idle-time>           Daemon stand by time in seconds, default=600, unlimited=-1
     -s                       Run a simulation, copy nothing
-    -a                       Auto start the daemon if not already running
+    Only available with GNU copy
+    -m                       Merge all files in <dest-dir>. Ignored if -o is given
+    -r                       Copy recursive. Ignored if -o is given
 
 ### Commands are:
 

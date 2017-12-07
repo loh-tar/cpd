@@ -213,6 +213,11 @@ isDelta() {
   [[ "$1" =~ ^[+-][0-9]+$ ]] && return 1 || return 0
 }
 
+isGNUcopy() {
+  # TODO Test this if it works as intended when running on non GNU/Linux system
+  cp --version 2>/dev/null |grep -q GNU
+}
+
 checkJobId() {
   check4PosInteger "$1"
 
@@ -392,20 +397,22 @@ cmdHelp() {
 #         out "  -q                       Be almost quiet" # TODO
         [[ $1 == "H" ]] && out ""
         out "${txtBold}Options:${txtClean}"
-        out "  -f <file>                Read list of source files from <file>"
+        out "  -a                       Auto start the daemon if not already running"
         if [[ $1 == "H" ]] ; then
         out "  -h                       Print less help"
         out "  -c <cols>                Force output to cut at <cols>, 0 or negative=no cut"
         else
         out "  -H                       Print more help"
         fi
-        out "  -m                       Merge all files in <dest-dir>. Ignored if -o is given"
+        out "  -f <file>                Read list of source files from <file>"
+        out "  -i <idle-time>           Daemon stand by time in seconds, default=600, unlimited=-1"
         out "  -o <cp-opt>              Add <cp-opt> to the called cp command. Disables -r/-m if given"
         out "  -p <user-prio>           Enqueue job with modified default priority. PRIO=6 minus <user-prio>"
-        out "  -r                       Copy recursive. Ignored if -o is given"
-        out "  -i <idle-time>           Daemon stand by time in seconds, default=600, unlimited=-1"
         out "  -s                       Run a simulation, copy nothing"
-        out "  -a                       Auto start the daemon if not already running"
+        if isGNUcopy ; then
+        out "  -m                       Merge all files in <dest-dir>. Ignored if -o is given"
+        out "  -r                       Copy recursive. Ignored if -o is given"
+        fi
         if (( ! isAlterEgo )) ; then
         [[ $1 == "H" ]] && out ""
         out "${txtBold}Commands:${txtClean}"
@@ -1233,10 +1240,14 @@ cmdNewJob() {
 
   local target=$(realpath "$1") ; shift
 
+  if (( optMerge || optRecursive )) ; then
+    isGNUcopy || exitError "No GNU copy, no option -m/-r, sorry"
+  fi
+
   if [[ -z "$optExtraCopy" ]] ; then
     if (( optMerge )) ; then
       copyOptions="$copyOptions --backup=numbered"
-    else
+    elif (( optRecursive )) ; then
       copyOptions="$copyOptions --parents"
     fi
   else
