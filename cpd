@@ -934,13 +934,10 @@ fi
         > "$tmpDir/job-status-$1" ;
     }
 
-    local total="0" err="0" i="0" j="1"
-    # Our source files are sorted by size, BIG->small
-    # 1) Copy one file after the other until it take less than one second
+    local total="0" err="0" i="0"
     while read size file
     do
       (( i++ ))
-      (( j++ ))
       local cmd="cp ${jobData["$1:CPYOPT"]} ${file@Q} ${jobData["$1:TARGET"]@Q}"
 
 if (( optSimulation )) ; then
@@ -973,57 +970,16 @@ fi
         let total+=size
       fi
 
-      printf "%(%FT%T)T [Job $1] A $SECONDS,$j - $i/${jobData["$1:FCOUNT"]} - $total/${jobData["$1:BYTES"]}\n" "-1" >> "$tmpDir/job.log"
       if (( $SECONDS > 0 )) ; then
         # Doing modifyJob here may be expensive, we waste already
         # a lot of time. TODO:If we want an updated jobFile we could
         # parse the job-status files in the daemon idle time
         writeJobStatus "$1"
         SECONDS="0"
-
-        (( (${jobData["$1:BYTES"]} * 7 / 10) < $total && j > 100 )) && break
-
-        let j=0
       fi
-      printf "%(%FT%T)T [Job $1] B $SECONDS,$j - $i/${jobData["$1:FCOUNT"]} - $total/${jobData["$1:BYTES"]}\n" "-1" >> "$tmpDir/job.log"
 
     done < "$tmpDir/job-files-$1"
 
-    (( i == ${jobData["$1:FCOUNT"]} )) && jobIsDone $1
-
-    # 2) Copy the rest of our source files at once
-    local filesLeft=$((${jobData["$1:FCOUNT"]} - i ))
-    printf "%(%FT%T)T [Job $1] Files left:$filesLeft\n" "-1" >> "$tmpDir/job.log"
-    # Build only for the log a list of our left over sources
-    local files=$(tail -n "$filesLeft" "$tmpDir/job-files-$1" | cut -f2- | paste -sd ' ')
-    # Because xargs can only append to the end of the executed command line
-    # the list of files, we have to add our target to these, tricky huh?
-    # Thanks joeytwiddle, https://stackoverflow.com/a/35612533
-    printf "placeholder\t${jobData["$1:TARGET"]}\n" >> "$tmpDir/job-files-$1"
-    let filesLeft+=1  # Now we have one 'file' more, our target
-
-if (( optSimulation )) ; then
-    # Sadly a fake build of the real command, not the real build
-    cmd="cp ${jobData["$1:CPYOPT"]} $files ${jobData["$1:TARGET"]}"
-    # No more fumble, just a 1s sleep job
-    cmd2="echo SLEEPJob $1 - 1s with files: $files; sleep 1;"
-
-    printf "%(%FT%T)T [Job $1] Fake Job: %s\nTrue Job: %s\n\n" "-1" \
-      "$cmd2" "$cmd" >> "$tmpDir/job.log"
-
-    (eval $cmd2) >>"$tmpDir/msg.log-job-$1" 2>>"$tmpDir/error.log-job-$1"
-
-else
-    cmd="cp ${jobData["$1:CPYOPT"]}"
-    printf "%(%FT%T)T [Job $1] %s %s %s\n" "-1" \
-      "$cmd" "$files" "${jobData["$1:TARGET"]}" >> "$tmpDir/job.log"
-    # Reading file names is tricky, discard size and convert to zero terminated
-    # list to ensure spaces are properly handled
-    tail -n "$filesLeft" "$tmpDir/job-files-$1" | cut -f2- | tr '\n' '\000' |
-      (eval xargs -0 $cmd) >>"$tmpDir/msg.log-job-$1" 2>>"$tmpDir/error.log-job-$1"
-
-fi
-    (( $? )) && err="1"
     # Only without errors display 100% copied, FIXME but if we have an error the display may not correct
     (( err )) || i="${jobData["$1:FCOUNT"]}"
 
