@@ -35,7 +35,6 @@ readonly alterEgo
 declare    optRecursive="0"
 declare    optMerge="0"
 declare    optSimulation="0"
-declare    optNoProgress="0"
 declare    optExtraCopy=""
 declare    optSourceList=""
 declare    optUserPrio="0"
@@ -900,134 +899,135 @@ cmdExit() {
 startJob() {
   # Need parms: id
   procInfo "$1" "Start"
-  arg=${jobData["$1:FILES"]}
-
-  local cmd="cp${jobData["$1:CPYOPT"]} ${jobData["$1:TARGET"]}"
-
   changeStatus "$1" "starting"
 
-  local jobHome="${jobData["$1:HOME"]}"
-
-if (( optSimulation )) ; then
-  local cmd2 st=$((($RANDOM % 9) * 2)) # SleepTime
-  # Assume we have only wrong HOME settings in our test data,
-  # force an error when sleep time is 4
-  (( st != 4 )) && jobHome="$HOME"
-fi
-
-  if ! cd "$jobHome" 2>/dev/null ; then
+if (( ! optSimulation )) ; then
+  if ! cd "${jobData["$1:HOME"]}" 2>/dev/null ; then
     error "Job home is gone: ${jobData["$1:HOME"]}" 2>"$tmpDir/error.log-job-$1"
     changeStatus "$1" "NOSTART"
     procInfo "$1" "StartERR"
     return
   fi
+fi
 
 
   (
-    local err="0" i="0"
+    jobIsDone() {
+      setLock || exit $err # Could that happens?
+      # Calc here not with BYTES but FCOUNT
+      modifyJob "$1" "DONE" "$(( 100 * $i / ${jobData["$1:FCOUNT"]} ))%"
+      unLock
 
-    if (( optNoProgress  )) ; then
-    # FIXME: This solution with xargs call for each file cp,
-    # but I think it should only do one call with all files
-
-if (( optSimulation )) ; then
-      case $st in
-        0)  cmd2='echo "StartERR $1"; SomeWrongComand;' ; ;;
-        2)  cmd2='echo "ERRORJob $1"; sleep ${st}; echo "What ever was wrong" >&2; exit 1;' ; ;;
-        *)  cmd2='echo "SLEEPJob $1 - ${st}s with file: xfile"; sleep ${st};' ; ;;
-      esac
-
-      # FIXME: I didn't got it all together working simply by cmd=cmd2
-      # So make a special treatment for each simulation type, not so nice
-      cmd2=${cmd2/\$1/$1}
-      cmd2=${cmd2//\$\{st\}/$st}
-      cut -f2- "$tmpDir/job-files-$1" | tr '\n' '\000' | xargs -0 -I xfile  \
-        bash -c "eval  $cmd2" >"$tmpDir/msg.log-job-$1" 2>"$tmpDir/error.log-job-$1"
-
-      # FIXME:Should run together with xargs line
-      printf "%(%FT%T)T [Job $1]\nFake Job: %s\nTrue Job: %s %s\n\n" "-1" \
-        "$cmd2" "$cmd" "${jobData["$1:FILES"]}" >> "$tmpDir/job.log"
-else
-      # Reading file names is tricky, discard size and convert to zero terminated
-      # list to ensure spaces are properly handled
-      cut -f2- "$tmpDir/job-files-$1" | tr '\n' '\000' | xargs -0   \
-        cp ${jobData["$1:CPYOPT"]} "${jobData["$1:TARGET"]}"        \
-          > "$tmpDir/msg.log-job-$1" 2>"$tmpDir/error.log-job-$1"
-
-      # FIXME:Should run together with the xargs line
-      printf "%(%FT%T)T [Job $1] %s %s\n" "-1" "$cmd" "${jobData["$1:FILES"]}" \
-        >> "$tmpDir/job.log"
-fi
-      err="$?"
-      i="${jobData["$1:FCOUNT"]}"
-
-    else
-      local total="0"
-
-      writeJobStatus() {
-        printf "[Job: %3s, %4s] [Done: %3s%%] [ToDo: Files: %s, Bytes: %s]\n"  \
-          "$1" "${jobData["$1:SIZE"]}"                        \
-          "$(( 100 * $total / ${jobData["$1:BYTES"]} ))"      \
-          "$(( ${jobData["$1:FCOUNT"]} - $i ))"               \
-          "$(( ${jobData["$1:BYTES"]} - $total ))"            \
-          > "$tmpDir/job-status-$1" ;}
-
-      while read size file
-      do
-        (( i++ ))
-
-if (( optSimulation )) ; then
-        # Using logarithm of file size as sleep time
-        # https://stackoverflow.com/a/7962297
-        st=$(echo "scale=2; l($size)/l(4)" | bc -l)
-        (( size )) || st="1" # When size is 0, log is negative, and then grumble sleep
-
-        case "$(($RANDOM % 9))" in
-          0)  cmd2='echo "ERRORJob $1"; sleep ${st}; echo "What ever was wrong" >&2; exit 1;' ; ;;
-          *)  cmd2='echo "SLEEPJob $1 - ${st}s with file: ($size) $file"; sleep ${st};' ; ;;
-        esac
-
-        cmd2=${cmd2/\$1/$1}
-        cmd2=${cmd2//\$\{st\}/$st}
-        cmd2=${cmd2/\$size/$size}
-        cmd2=${cmd2/\$file/$file}
-        printf "%(%FT%T)T [Job $1]\nFake Job: %s\nTrue Job: %s %s\n\n" "-1" \
-          "$cmd2" "$cmd" "$file" >> "$tmpDir/job.log"
-
-       (eval $cmd2 >> "$tmpDir/msg.log-job-$1" 2>>"$tmpDir/error.log-job-$1")
-else
-        printf "%(%FT%T)T [Job $1] %s %s\n" "-1" "$cmd" "$file"       \
-          >> "$tmpDir/job.log"
-
-        cp ${jobData["$1:CPYOPT"]} "${jobData["$1:TARGET"]}" "$file"  \
-          >> "$tmpDir/msg.log-job-$1" 2>>"$tmpDir/error.log-job-$1"
-fi
-
-        if (( $? )) ; then
-          err="1"
-        else
-          let total+=size
-          if (( $SECONDS > 1 )) ; then
-            # Doing modifyJob here may be expensive, we waste already
-            # a lot of time. TODO:If we want an updated jobFile we could
-            # parse the job-status files in the daemon idle time
-            writeJobStatus "$1"
-            SECONDS="0"
-          fi
-        fi
-
-      done < "$tmpDir/job-files-$1"
       # Instead of rm we could finally writeJobStatus, but I think we should
       # only keep a file for running jobs
       rm "$tmpDir/job-status-$1" 2>/dev/null
-    fi
 
-    setLock || exit $err # Could that happens?
-    # Calc here not with BYTES but FCOUNT
+      exit $err
+    }
 
-    modifyJob "$1" "DONE" "$(( 100 * $i / ${jobData["$1:FCOUNT"]} ))%"
-    unLock
-    exit $err
+    writeJobStatus() {
+      printf "[Job: %3s, %4s] [Done: %3s%%] [ToDo: Files: %s, Bytes: %s]\n"  \
+        "$1" "${jobData["$1:SIZE"]}"                        \
+        "$(( 100 * $total / ${jobData["$1:BYTES"]} ))"      \
+        "$(( ${jobData["$1:FCOUNT"]} - $i ))"               \
+        "$(( ${jobData["$1:BYTES"]} - $total ))"            \
+        > "$tmpDir/job-status-$1" ;
+    }
+
+    local total="0" err="0" i="0" j="1"
+    # Our source files are sorted by size, BIG->small
+    # 1) Copy one file after the other until it take less than one second
+    while read size file
+    do
+      (( i++ ))
+      (( j++ ))
+      local cmd="cp ${jobData["$1:CPYOPT"]} ${file@Q} ${jobData["$1:TARGET"]@Q}"
+
+if (( optSimulation )) ; then
+      # Using logarithm of file size as sleep time
+      # https://stackoverflow.com/a/7962297
+      local st=$(echo "scale=2; l($size)/l(8)" | bc -l)
+      (( size )) || st="1" # When size is 0, log is negative, and then grumble sleep
+
+      case "$(($RANDOM % 9))" in
+        2)  cmd2="echo ERRORJob $1; sleep 1; echo 'What ever was wrong' >&2; exit 1;" ; ;;
+        *)  cmd2="echo 'SLEEPJob $1 - ${st}s with file: ($size) $file'; sleep ${st};" ; ;;
+      esac
+
+      printf "%(%FT%T)T [Job $1]\nFake Job: %s\nTrue Job: %s\n\n" "-1" \
+        "$cmd2" "$cmd" >> "$tmpDir/job.log"
+
+      cmd="$cmd2"
+
+else
+      printf "%(%FT%T)T [Job $1] %s\n" "-1" "$cmd" >> "$tmpDir/job.log"
+
+fi
+      (eval $cmd) >>"$tmpDir/msg.log-job-$1" 2>>"$tmpDir/error.log-job-$1"
+
+      if (( $? )) ; then
+        err="1"
+        printf "%(%FT%T)T [Job $1] ${txtBold}Trouble${txtClean} with file: %s\n" \
+          "-1" "$file" >> "$tmpDir/job.log"
+      else
+        let total+=size
+      fi
+
+      printf "%(%FT%T)T [Job $1] A $SECONDS,$j - $i/${jobData["$1:FCOUNT"]} - $total/${jobData["$1:BYTES"]}\n" "-1" >> "$tmpDir/job.log"
+      if (( $SECONDS > 0 )) ; then
+        # Doing modifyJob here may be expensive, we waste already
+        # a lot of time. TODO:If we want an updated jobFile we could
+        # parse the job-status files in the daemon idle time
+        writeJobStatus "$1"
+        SECONDS="0"
+
+        (( (${jobData["$1:BYTES"]} * 7 / 10) < $total && j > 100 )) && break
+
+        let j=0
+      fi
+      printf "%(%FT%T)T [Job $1] B $SECONDS,$j - $i/${jobData["$1:FCOUNT"]} - $total/${jobData["$1:BYTES"]}\n" "-1" >> "$tmpDir/job.log"
+
+    done < "$tmpDir/job-files-$1"
+
+    (( i == ${jobData["$1:FCOUNT"]} )) && jobIsDone $1
+
+    # 2) Copy the rest of our source files at once
+    local filesLeft=$((${jobData["$1:FCOUNT"]} - i ))
+    printf "%(%FT%T)T [Job $1] Files left:$filesLeft\n" "-1" >> "$tmpDir/job.log"
+    # Build only for the log a list of our left over sources
+    local files=$(tail -n "$filesLeft" "$tmpDir/job-files-$1" | cut -f2- | paste -sd ' ')
+    # Because xargs can only append to the end of the executed command line
+    # the list of files, we have to add our target to these, tricky huh?
+    # Thanks joeytwiddle, https://stackoverflow.com/a/35612533
+    printf "placeholder\t${jobData["$1:TARGET"]}\n" >> "$tmpDir/job-files-$1"
+    let filesLeft+=1  # Now we have one 'file' more, our target
+
+if (( optSimulation )) ; then
+    # Sadly a fake build of the real command, not the real build
+    cmd="cp ${jobData["$1:CPYOPT"]} $files ${jobData["$1:TARGET"]}"
+    # No more fumble, just a 1s sleep job
+    cmd2="echo SLEEPJob $1 - 1s with files: $files; sleep 1;"
+
+    printf "%(%FT%T)T [Job $1] Fake Job: %s\nTrue Job: %s\n\n" "-1" \
+      "$cmd2" "$cmd" >> "$tmpDir/job.log"
+
+    (eval $cmd2) >>"$tmpDir/msg.log-job-$1" 2>>"$tmpDir/error.log-job-$1"
+
+else
+    cmd="cp ${jobData["$1:CPYOPT"]}"
+    printf "%(%FT%T)T [Job $1] %s %s %s\n" "-1" \
+      "$cmd" "$files" "${jobData["$1:TARGET"]}" >> "$tmpDir/job.log"
+    # Reading file names is tricky, discard size and convert to zero terminated
+    # list to ensure spaces are properly handled
+    tail -n "$filesLeft" "$tmpDir/job-files-$1" | cut -f2- | tr '\n' '\000' |
+      (eval xargs -0 $cmd) >>"$tmpDir/msg.log-job-$1" 2>>"$tmpDir/error.log-job-$1"
+
+fi
+    (( $? )) && err="1"
+    # Only without errors display 100% copied, FIXME but if we have an error the display may not correct
+    (( err )) || i="${jobData["$1:FCOUNT"]}"
+
+    jobIsDone $1
   )&
 
 
@@ -1291,8 +1291,7 @@ cmdNewJob() {
   [[ -s "$newJobFiles" ]] || exitError "No files to copy"
   # Don't copy files twice
   # Remove leading ./ from files, ensure file names match and looks nicer
-  sed -e "s/\t\.\//\t/" "$newJobFiles" | sort | uniq > "$newJobFiles-uniq"
-
+  sed -e "s/\t\.\//\t/" "$newJobFiles" | sort -rn | uniq > "$newJobFiles-uniq"
   mv -f "$newJobFiles-uniq" "$newJobFiles"
 
   # Collect some statistics
@@ -1301,7 +1300,7 @@ cmdNewJob() {
   local bytes=$(cut -f1 "$newJobFiles" | paste -sd+ | bc)
 
   # Build small file list only for user hint
-  local files=$(cut -f2 "$newJobFiles" | head -n20 | paste -sd' ')
+  local files=$(cut -f2 "$newJobFiles" | head -n20 | paste -sd';')
   # 200 is arbitrary chosen, long enough to fill one line
   (( ${#files} > 200 )) && files="${files:0:199}~"
 
@@ -1339,7 +1338,7 @@ cmdNewJob() {
   addToJobFile "$newId" "FCOUNT" "$count"
   addToJobFile "$newId" "BYTES" "$bytes"
   addToJobFile "$newId" "SIZE" "$total"
-  addToJobFile "$newId" "CPYOPT" "$copyOptions -t"
+  addToJobFile "$newId" "CPYOPT" "$copyOptions"
 
   unLock
 
