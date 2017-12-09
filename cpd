@@ -505,13 +505,31 @@ outJobLine() {
 }
 
 showStatus() {
+  if [[ -s "$jobFile" ]] ; then
+    out "Jobs by status:"
+    for s in "Running" "Error" "NoStart" "Pending" "Killed" "Canceled" "Done"
+    do
+      # Grepping lines like:  1:STATUS:foobar
+      local jobCount=$(grep -i "STATUS:$s" "$tmpDir/jobs" | wc -l)
+#       (( jobCount )) || continue
+      local -a jobs=($(grep -i "STATUS:$s" "$tmpDir/jobs" | cut -d: -f1))
+      printf -v txt "  %-8s %5s: %s" "$s" "($jobCount)" "${jobs[*]}"
+      out "$txt"
+    done
+  else
+    out "No jobs"
+  fi
+
+  out ""
+
   if getDaemonPid ; then
     out "Daemon is running with pid $daemonPID"
     printFile "$tmpDir/processStatus"
+    out " " # The blank is needed!
+
     # Thanks to Daniel
     # https://unix.stackexchange.com/a/325581
     if compgen -G "$tmpDir/job-status-*" > /dev/null; then
-      out ""
       out "Running jobs:"
       printFile "$tmpDir"/job-status-*
     fi
@@ -519,20 +537,6 @@ showStatus() {
     out "No running daemon"
   fi
 
-  if [[ -s "$jobFile" ]] ; then
-    out "\nJobs by status:"
-    for s in "Running" "Error" "NoStart" "Pending" "Killed" "Canceled" "Done"
-    do
-      # Grepping lines like:  1:STATUS:foobar
-      local jobCount=$(grep -i "STATUS:$s" "$tmpDir/jobs" | wc -l)
-      (( jobCount )) || continue
-      local -a jobs=($(grep -i "STATUS:$s" "$tmpDir/jobs" | cut -d: -f1))
-      printf -v txt "  %-8s %5s: %s" "$s" "($jobCount)" "${jobs[*]}"
-      out "$txt"
-    done
-  else
-    out "\nNo jobs"
-  fi
 }
 
 cmdShow() {
