@@ -756,6 +756,7 @@ cmdProcess() {
   trap "recheckJobList=1; info '${clearLine}Signaled* New or changed jobs *\n'" USR1 2>/dev/null
   trap "stopRunning=1; info '${clearLine}Received signal to stop, will wait for running jobs\n'" USR2 2>/dev/null
   trap checkChilds CHLD
+  trap "rm $tmpDir/daemon-pid" EXIT
 
   echo "$$" > "$tmpDir/daemon-pid"
   recheckJobList="1"
@@ -765,8 +766,6 @@ cmdProcess() {
     (( ! ${#jobPids[*]} && stopRunning )) && break
     processJobList
   done
-
-  rm "$tmpDir/daemon-pid"
 
   if (( stopRunning )) ; then
     info "Processing aborted by signal\n"
@@ -811,6 +810,8 @@ cmdStartDaemon() {
       trap "recheckJobList=1; printf '%(%FT%T)T Signaled* New or changed jobs *\n' '-1'" USR1 2>/dev/null
       trap "stopRunning=1; printf '%(%FT%T)T Signaled! I have to stop, will wait for running jobs\n' '-1'" USR2 2>/dev/null
       trap checkChilds CHLD
+      trap "rm $tmpDir/daemon-pid" EXIT
+
       echo "$$" > "$tmpDir/daemon-pid"
       recheckJobList="1"
 
@@ -851,7 +852,6 @@ cmdStartDaemon() {
       done
 
       printf "%(%FT%T)T Good bye and have a nice day\n" "-1"
-      rm "$tmpDir/daemon-pid"
     ;;
 
     BANISHMENT) # 2. child
