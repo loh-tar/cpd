@@ -208,6 +208,14 @@ check4Integer() {
   [[ "$1" =~ ^-?[0-9]+$ ]] || exitError "Not my kind of integer: $1"
 }
 
+check4Jobs() {
+  [[ -s "$jobFile" ]] && return
+
+  local cmd="${FUNCNAME[1]:3}"; cmd="${cmd,,[A-Z]}"
+  [[ "$cmd" == "changeprio" ]] && cmd="change PRIO"
+  exitGood "No jobs to $cmd"
+}
+
 isDelta() {
   [[ "$1" =~ ^[+-][0-9]+$ ]] && return 1 || return 0
 }
@@ -286,8 +294,8 @@ addToJobFile() {
 updateJobList() {
   # Do NOT call updateJobList after add or change a job!
   # That would confuse processJobList
-  readJobs
   [[ -s "$jobFile" ]] || return
+  readJobs
   rm -f "$jobList"
 
   read max < "$tmpDir/next-id"
@@ -531,7 +539,7 @@ cmdShow() {
   # TODO: Add more options for different kind of display. The are so much
   # possibilities: filters, sort order, show as ticket, selected fields...
   local type="$1"
-  [[ -f "$jobFile" ]] || type="NoJobs"
+  [[ -s "$jobFile" ]] || type="NoJobs"
   [[ "$1" == "s"   ]] && type="showStatus"
 
   setScreenWidth
@@ -623,7 +631,7 @@ notifyDaemon() {
 
 cmdKill() {
   # Need parms: id...
-
+  check4Jobs
   setLock || exitError "No jobs killed"
 
   for jobId ; do
@@ -643,7 +651,7 @@ cmdKill() {
 
 cmdResume() {
   # Need parms: id...
-
+  check4Jobs
   setLock || exitError "No jobs resumed"
 
   for jobId ; do
@@ -664,7 +672,7 @@ cmdResume() {
 
 cmdStop() {
   # Need parms: id...
-
+  check4Jobs
   setLock || exitError "No jobs stopped"
 
   for jobId ; do
@@ -685,6 +693,7 @@ cmdStop() {
 
 cmdChangePrio() {
   # Need parms: id prio
+  check4Jobs
   (( $# < 2 )) && exitError "Need two arguments"
 
   local prio="0" delta="0"
@@ -740,6 +749,7 @@ cmdProcess() {
   notifyDaemon && exitGood "Running daemon with pid $daemonPID is triggered to do the job"
   (( optSimulation )) && info "${txtBold}Running a simulation, nothing will copied${txtClean}\n"
 
+  check4Jobs
   checkTmpDir
   cd "$tmpDir"
   set -o monitor
@@ -1098,6 +1108,9 @@ checkChilds() {
 }
 
 processJobList() {
+  recheckJobList="0"
+  [[ -s "$jobFile" ]] || return
+
   setLock || { error "List not processed"; return 1; }
   updateJobList
   setScreenWidth
@@ -1105,7 +1118,6 @@ processJobList() {
   local busyDrives=()
   local stoppedJobs=()
   local waitingJobs=()
-  recheckJobList="0"
 
   while read id prio date status drive
   do
