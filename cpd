@@ -256,7 +256,7 @@ setLock() {
   do
     if rm "$tmpDir/not-locked" 2>/dev/null
     then
-      echo "Locked by pid $$ at $(date -Is)" > "$tmpDir/locked-by"
+      echo "Locked by $alterEgo pid $$ at $(date -Is)" > "$tmpDir/locked-by"
       (( i >= freeTry )) && info "OK\n"
       return 0 # Good!
     else
@@ -265,7 +265,21 @@ setLock() {
       if (( i > freeTry ))
         then info "."
       elif (( i == freeTry ))
-        then info "Try to lock..."
+        then
+          local who=$(cut -d' ' -f3 "$tmpDir/locked-by" 2>/dev/null)
+          local pid=$(cut -d' ' -f5 "$tmpDir/locked-by" 2>/dev/null)
+          if [[ -f "$tmpDir/locked-by" ]] ; then
+            local pid2=($(ps -C $who -o pid=))
+            if [[ "${pid2[*]}" =~ "$pid" ]] ; then
+              info "Try to lock..."
+            else
+              info "Oops?! Lock owner not found. Looks like a state after some crash\n"
+              unLock; let i=0
+            fi
+          else
+            info "Oops?! No 'locked-by'. Looks like a state after some crash\n"
+            unLock; let i=0
+          fi
       fi
 
       sleep $(echo "0.3 + 0.4 * $i" | bc)
