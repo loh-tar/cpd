@@ -621,12 +621,12 @@ getDaemonPid() {
     daemonPID=$(< "$tmpDir/daemon-pid")
     [[ -z "$daemonPID" ]] && exitError "FATAL: Empty pid file" # Should never happens
     local pid2=($(ps -C $me -o pid=))
-    [[ "${pid2[*]}" =~ "$daemonPID" ]] || exitError "FATAL: Daemon not found" # Should never happens
-    return 0
-  else
-    daemonPID="0"
-    return 1
+    [[ "${pid2[*]}" =~ "$daemonPID" ]] && return 0
+    info "Oops?! Daemon not found. Looks like a state after some crash\n"
   fi
+
+  daemonPID="0"
+  return 1
 }
 
 notifyDaemon() {
