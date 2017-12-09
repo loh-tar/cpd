@@ -3,10 +3,16 @@
 type=${1:-"small"}
 cpdDir="/tmp/cpd/user-$(id -un)"
 
+cd $(dirname $(readlink -e $0 ))
+
 prepareTest() {
   echo "Prepare test with clean tmp dir"
   rm -rf $cpdDir/
   mkdir -p $cpdDir/
+  touch  $cpdDir/not-locked
+
+#   [[ "$type" == "sized" ]] && { ./testData/makeSizedFiles; return; }
+
   cp ./testData/$type/{jobs,next-id,not-locked,job-files-*} $cpdDir/
 }
 
@@ -18,13 +24,13 @@ if [[ -f $cpdDir/daemon-pid ]] ; then
     echo "Um? Well, I ignore this in the hope that you know what you are doing"
     # Just to be sure all are gone
     sleep 1
-    killall cpd
+    killall cpd 2>/dev/null
   fi
   prepareTest
   optWatch="1"
-#   echo "Read quick! Ctrl-C to stop watching"
-#   sleep 1
-  ./cpd -s start
+  echo "Read quick!"
+  echo "Restart the daemon in simulation mode..."
+  (sleep 6; ./cpd -s start 2>/dev/null 1>&2 )&
 else
   prepareTest
 fi
@@ -51,6 +57,9 @@ runCommand() {
 )&
 
 if (( optWatch )) ; then
+  # No runCommand now, not working somehow, guess due tee
+  echo "Run 'watch -n1 ./cpd show' for your interest"
+  sleep 3
   watch -n1 ./cpd show
   # After Ctrl-C watch the info is gone, so bring it back
   runCommand ./cpd show
@@ -60,4 +69,5 @@ else
   runCommand ./cpd show e
 fi
 
+cd $OLDPWD
 echo "Logfile of this test? Try: cat $cpdDir/test.log"
