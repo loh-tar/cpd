@@ -466,6 +466,7 @@ cmdHelp() {
                 "forces to run as if ${txtBold}newjob${txtClean} was given"
         out "  • The ${txtBold}<command>${txtClean} is fuzzy recognized by any parts of its long name"
         out "  • Short commands which take an argument can written without a space, ${txtBold}handy huh?${txtClean}"
+        out "  • The ${txtBold}<job>${txtClean} can be also a range: N-M N- -M - (single ${txtBold}-${txtClean} select all jobs)"
         out "  • The job ${txtBold}PRIO${txtClean} is not static. Lower numbers have a higher priority"
         out "    - Jobs started in order of PRIO and ${txtBold}enqueue time${txtClean}"
         out "    - Intern used is: 0 need attention, 1 running, 2 stopped, 8 error/killed, 9 done"
@@ -647,9 +648,51 @@ notifyDaemon() {
   fi
 }
 
+expandJobIds() {
+  # Each parm could be:
+  #  N-M (jobs from N to M)
+  #   -M (jobs from first till M)
+  #  N-  (jobs from N till last)
+  #  -   (all jobs)
+
+  local maxId expIds=()
+
+  read maxId < "$tmpDir/next-id"
+  let maxId-=1
+
+  for parm ; do
+    if [[ "$parm" == "-" ]] ; then
+        expIds=($(seq $maxId))
+        break
+    elif [[ "$parm" =~ ^[0-9]+$ ]] ; then
+        expIds+=(${parm})
+    elif [[ "$parm" =~ ^-[0-9]+$ ]] ; then
+        expIds+=($(seq ${parm:1}))
+    elif [[ "$parm" =~ ^[0-9]+-$ ]] ; then
+        expIds+=($(seq ${parm:0: -1} $maxId))
+    elif [[ "$parm" =~ ^[0-9]+-[0-9]+$ ]] ; then
+        expIds+=($(seq ${parm%-[0-9]*} ${parm#[0-9]*-}))
+    else
+        exitError "Not my kind of ID: $parm"
+    fi
+  done
+
+  # Remove douplicates and out of range IDs
+  local -A help
+  for id in "${expIds[@]}"; do
+    (( id > maxId )) && continue
+    help["$id"]=1
+  done
+
+  (( ${#help[@]} == 0 )) && exitError "No valid IDs given"
+
+  echo ${!help[@]}
+}
+
 cmdKill() {
   # Need parms: id...
   check4Jobs
+  set -- $(expandJobIds "$@")
   setLock || exitError "No jobs killed"
 
   for jobId ; do
@@ -670,6 +713,7 @@ cmdKill() {
 cmdResume() {
   # Need parms: id...
   check4Jobs
+  set -- $(expandJobIds "$@")
   setLock || exitError "No jobs resumed"
 
   for jobId ; do
@@ -691,6 +735,7 @@ cmdResume() {
 cmdStop() {
   # Need parms: id...
   check4Jobs
+  set -- $(expandJobIds "$@")
   setLock || exitError "No jobs stopped"
 
   for jobId ; do
@@ -710,7 +755,7 @@ cmdStop() {
 }
 
 cmdChangePrio() {
-  # Need parms: id prio
+  # Need parms: prio id...
   check4Jobs
   (( $# < 2 )) && exitError "Need two arguments"
 
@@ -732,7 +777,7 @@ cmdChangePrio() {
 
   shift
 
-  for jobId ; do check4PosInteger "$jobId"; done
+  set -- $(expandJobIds "$@")
 
   setLock || exitError "No job changed"
 
