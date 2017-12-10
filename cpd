@@ -144,8 +144,13 @@ write() {
   # Need parms: fileDescriptor [format] text
   local fd="$1"; shift
   local format="%b"
-  (( $# > 1 )) && { format="$1"; shift; }
   local msg
+  if (( $# > 1 )) ; then
+    if [[ "$1" =~ % ]]
+    then format="$1"; shift;
+    else msg="$@"
+    fi
+  fi
 
   printf -v msg "$format" "$@"
   fitToScreen $fd msg
@@ -463,7 +468,7 @@ cmdHelp() {
         out "${txtBold}Notes:${txtClean}"
         if (( ! isAlterEgo )) ; then
         out "  • Calling $me with any ${txtBold}other name${txtClean} than ${txtBold}$me${txtClean}" \
-                "forces to run as if ${txtBold}newjob${txtClean} was given"
+               " forces to run as if ${txtBold}newjob${txtClean} was given"
         out "  • The ${txtBold}<command>${txtClean} is fuzzy recognized by any parts of its long name"
         out "  • Short commands which take an argument can written without a space, ${txtBold}handy huh?${txtClean}"
         out "  • The ${txtBold}<job>${txtClean} can be also a range: N-M N- -M - (single ${txtBold}-${txtClean} select all jobs)"
@@ -1367,7 +1372,7 @@ cmdNewJob() {
   local total=$(numfmt --to=si $bytes)
   local bytesPerFile=$(( bytes / count ))
 
-  out "%s" "New job: $newId - PRIO $(( 6 - optUserPrio )) " \
+  out "New job: $newId - PRIO $(( 6 - optUserPrio )) " \
       "($count files, $total total, $(numfmt --to=si $bytesPerFile) avg size)"
   out "Files  : ${files}"
   out "Target : $target"
