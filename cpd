@@ -19,7 +19,7 @@
 #   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
 #   MA 02110-1301, USA.
 
-declare -r version="0.1pre9"
+declare -r version="0.1"
 declare -r vDate="Dez 2017"
 
 declare -r me=$(basename $(readlink -e $0 ))
@@ -34,6 +34,7 @@ readonly alterEgo
 
 declare    optRecursive="0"
 declare    optMerge="0"
+declare    optTarget=""
 declare    optSimulation="0"
 declare    optExtraCopy=""
 declare    optSourceList=""
@@ -407,11 +408,10 @@ cmdHelp() {
         local extra=" newjob"
         out "  $who [option>...] <command> [<argument>...]"
         fi
-#         out "  $who [option>...]$extra <source> <destination>"      # TODO
-#         out "  $who [option>...]$extra <source>... <dest-dir>"      # TODO
-        out "  $who [option>...]$extra <dest-dir> <source>..."        # DELETE
-#         out "  $who [option>...]$extra -t <dest-dir> <source>..."   # TODO
+        out "  $who [option>...]$extra <source> <destination>"
+        out "  $who [option>...]$extra <source>... <dest-dir>"
         out "  $who [option>...]$extra <dest-dir>                   # Read list of sources from stdin"
+        out "  $who [option>...]$extra -t <dest-dir> <source>..."
         out "  $who [option>...]$extra -f <file> <dest-dir>"
 #         [[ $1 == "H" ]] && out ""
 #         out "  -v                       Be verbose" # TODO
@@ -1207,15 +1207,45 @@ processJobList() {
 }
 
 cmdNewJob() {
-  [[ -d "$1" ]] || exitError "Destination is not a directory: $1"
   check4PosInteger "$optUserPrio"
+
+  if (( optMerge || optRecursive )) ; then
+    isGNUcopy || exitError "No GNU copy, no option -m/-r, sorry"
+  fi
+
   (( optUserPrio > 3 )) && { info "Adjust <user-prio> to 3\n"; optUserPrio="3"; }
+
+  local target
+  if [[ -n "$optTarget" ]] ; then
+    # cpc -t <dest-dir> <source>...
+    target="$optTarget"
+  elif (( $# == 1 )) ; then
+    # cpc <dest-dir>  - Read list of sources from stdin
+    target=$(realpath "$1") ; shift
+  else
+    # cpc <source> <destination>
+    # cpc <source>... <dest-dir>
+    local last="${@: -1}"; set -- "${@:1:$(($#-1))}"  # Remove last arg
+    if [[ -d "$last" ]]
+      then
+        target="$last"    # cpc <source>... <dest-dir>
+      else
+        (( $# > 1 )) && exitError "No destination directory given"
+
+        local newName="$(basename $last)"
+        info "Rename : $1 -> $newName\n"
+        target="$(dirname $(realpath $last) )"
+        newName="/$newName"
+    fi
+  fi
+
+  [[ -d "$target" ]] || exitError "Destination directory not found: $target"
 
   # Get the destination drive
   # FIXME: As long we have plain drives all is nice, but with mappers, raid or
   # what ever other hell, I think there is now way to get the real drive(?)
   # Therefore we build poor fake drives as workaround
-  local drive=$(df -P "$1" | tail -n1 | cut -d' ' -f1)   # Now /dev/foo/drive123
+  local drive=$(df -P "$target" | tail -n1 | cut -d' ' -f1)   # Now /dev/foo/drive123
   if [[ "$drive" =~ /dev/mapper ]] ; then
     drive=${drive#/dev/mapper/}
     drive=${drive:0:13}                   # Use only first part of full name
@@ -1224,11 +1254,7 @@ cmdNewJob() {
     drive=${drive%%[0-9]*}                # Drive only matters, not partition
   fi
 
-  local target=$(realpath "$1") ; shift
-
-  if (( optMerge || optRecursive )) ; then
-    isGNUcopy || exitError "No GNU copy, no option -m/-r, sorry"
-  fi
+  target="$target$newName"
 
   if [[ -z "$optExtraCopy" ]] ; then
     if (( optMerge )) ; then
@@ -1298,8 +1324,9 @@ cmdNewJob() {
 
   out "%s" "New job: $newId - PRIO $(( 6 - optUserPrio )) " \
       "($count files, $total total, $(numfmt --to=si $bytesPerFile) avg size)"
-  out "Target : $target"
   out "Files  : ${files}"
+  out "Target : $target"
+  out "Drive  : $drive"
   if [[ -n "$optExtraCopy" ]] ; then
   out "Note   : Listed job data may differ due to given special cp options"
   fi
@@ -1363,7 +1390,7 @@ do
 done
 
 OPTIND="1"
-while getopts ac:f:hi:mo:p:rs opt
+while getopts ac:f:hi:mo:p:rst: opt
 do
   case $opt in
     a)  optStartDaemon="1"               ; ;;
@@ -1376,6 +1403,7 @@ do
     p)  optUserPrio="$OPTARG"            ; ;;
     r)  optRecursive="1"                 ; ;;
     s)  optSimulation="1"                ; ;;
+    t)  optTarget="$OPTARG"              ; ;;
 
     \?) exitError "Need help? Use: $me -h"  ; ;;
   esac

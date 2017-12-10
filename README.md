@@ -9,7 +9,9 @@ The purpose is collect copy jobs and start them only if the target drive is not 
 ### Usage
 
     cpd [option>...] <command> [<argument>...]
-    cpd [option>...] newjob <dest-dir> <source>...
+    cpd [option>...] newjob <source> <destination>
+    cpd [option>...] newjob <source>... <dest-dir>
+    cpd [option>...] newjob -t <dest-dir> <source>...
     cpd [option>...] newjob <dest-dir>                   # Read list of sources from stdin
     cpd [option>...] newjob -f <file> <dest-dir>
 
