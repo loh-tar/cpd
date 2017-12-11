@@ -472,16 +472,25 @@ cmdHelp() {
         out "  • The ${txtBold}<command>${txtClean} is fuzzy recognized by any parts of its long name"
         out "  • Short commands which take an argument can written without a space, ${txtBold}handy huh?${txtClean}"
         out "  • The ${txtBold}<job>${txtClean} can be also a range: N-M N- -M - (single ${txtBold}-${txtClean} select all jobs)"
+        fi
+        out "  • Without ${txtBold}-o${txtClean} is ${txtBold}-Lp${txtClean} added to each job"
+        out "  • Enclose ${txtBold}<cp-opt>${txtClean} in quotes if you need more than one cp option"
+        if (( isAlterEgo )) ; then
+        out "  • New jobs have PRIO 6 unless ${txtBold}-p${txtClean} was given"
+        fi
+        if (( ! isAlterEgo )) ; then
+        if isGNUcopy ; then
+        out "  • Options ${txtBold}-m/-r${txtClean} are short cuts, whatch the info after add a new job"
+        fi
         out "  • The job ${txtBold}PRIO${txtClean} is not static. Lower numbers have a higher priority"
         out "    - Jobs started in order of PRIO and ${txtBold}enqueue time${txtClean}"
+        out "    - New jobs have PRIO 6 unless ${txtBold}-p${txtClean} was given"
         out "    - Intern used is: 0 need attention, 1 running, 2 stopped, 8 error/killed, 9 done"
         out "  • ${txtBold}exit${txtClean} stops job processing, if so, or stops the daemon at all, if not"
         out "    - Adding a new job trigger the daemon to continue job processing, there is no blocking"
         out "  • ${txtBold}tidy${txtClean} does nothing else than ${txtBold}'rm -rf $tmpDir'${txtClean}"
         out "  • With ${txtBold}-s${txtClean} will only run a sleep/forced-error job with a crude chosen time of a few seconds."
         fi
-        out "  • Enclose ${txtBold}<cp-opt>${txtClean} in quotes if you need more than one option"
-        out "  • New jobs have prio 6 unless ${txtBold}-p${txtClean} was given"
         out ""
         out "${txtBold}Examples:${txtClean}"
         if (( ! isAlterEgo )) ; then
@@ -1306,49 +1315,44 @@ cmdNewJob() {
 
   target="$target$newName"
 
-  if [[ -z "$optExtraCopy" ]] ; then
-    if (( optMerge )) ; then
-      copyOptions="$copyOptions --backup=numbered"
-    elif (( optRecursive )) ; then
-      copyOptions="$copyOptions --parents"
-    fi
-  else
+  local copyOptions="-Lp"
+  if [[ -n "$optExtraCopy" ]] ; then
     optRecursive="0"
     copyOptions="$optExtraCopy"
+  else
+    if (( optRecursive )) ; then
+      if (( optMerge )) ; then
+        copyOptions+=" -r --backup=numbered"
+      else
+        copyOptions+=" -r --parents"
+      fi
+    elif (( optMerge )) ; then
+      copyOptions+=" --backup=numbered"
+    fi
   fi
 
   checkTmpDir
   newJobFiles=$(mktemp --tmpdir="$tmpDir" new-job-files.XXXX)
   trap "rm $newJobFiles" EXIT
 
-  # FIXME:Get rid of this ugly construct and do it somehow in one loop >>>
-  addSourceFile() {
-    [[ ! -e "$1" ]] && exitError "File not found: $1"
-
-    if [[ -z "$optExtraCopy" ]] && [[ -d "$1" ]] ; then
-      if (( ! optRecursive )) ; then
-        # Remove directories from file list. They would only cause
-        # warnings when running cp without -r
-        info "Omitted: $1\n"
-        return
-      else
-        find "$1" -type f -printf "%s\t%p\n" >> "$newJobFiles"
-      fi
-      return
-    fi
-
-    local size=$(stat -c%s "$1")
-    printf "$size\t$1\n" >> "$newJobFiles"
-  }
-  if (( $# )) ; then
-    # Read arguments from command line
-    for file        ; do addSourceFile "$file"; done
-  else
+  if (( $# == 0 )) ; then
     # Read from file, when given, otherwise from stdin
+    # FIXME Looks still a little strange to me, can you simplify it?
     (( ${#optSourceList} )) && exec <"$optSourceList"
-    while read file ; do addSourceFile "$file"; done
+    local -a fl=() # File list
+    while read f ; do fl+=("$f"); done
+    set -- "${fl[@]}"
   fi
-  # <<< FIXME:Get rid of this...
+
+  if [[ -n "$optExtraCopy" ]] ; then
+    # Ensure all arguments are given, but don't go deep
+    find "$@" -maxdepth 0 -printf "%s\t%p\n"  >> "$newJobFiles"
+  elif (( optRecursive )) ; then
+    find -L "$@" -printf "%s\t%p\n"  >> "$newJobFiles"
+  else
+    # Ignore directories, they would cp cause to grumble without -r
+    find -L "$@" -type d -prune -o -printf "%s\t%p\n"  >> "$newJobFiles"
+  fi
 
   [[ -s "$newJobFiles" ]] || exitError "No files to copy"
   # Don't copy files twice
