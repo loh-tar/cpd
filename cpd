@@ -1252,6 +1252,7 @@ processJobList() {
 }
 
 cmdNewJob() {
+  (( $# )) || exitError "Need at least a <dest-dir>"
   check4PosInteger "$optUserPrio"
 
   if (( optMerge || optRecursive )) ; then
