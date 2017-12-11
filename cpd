@@ -231,20 +231,6 @@ isGNUcopy() {
   cp --version 2>/dev/null |grep -q GNU
 }
 
-checkJobId() {
-  check4PosInteger "$1"
-
-  [[ $(cut -d' ' -f1 "$jobFile" | grep -c "$1") -eq 0 ]] &&
-    exitError "Job not found: $1"
-}
-
-checkStatus() {
-  # Need parms: id status change
-  local status=$(getJobValue "$1" "STATUS")
-  local change=${3-"change"}
-  [[ "$status" == "$2" ]] || exitError "Job $1 is '$status', you can only $change '$2' jobs"
-}
-
 unLock(){
   rm "$tmpDir/locked-by"  2>/dev/null
   touch "$tmpDir/not-locked"
