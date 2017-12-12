@@ -333,9 +333,9 @@ changeStatus() {
   # Need parms: id newStatus
   modifyJob $1 "STATUS" $2
 
-  if [[ "STOPPING CANCEL" =~ $2 ]] ; then
+  if [[ "STOPPING CANCEL STARTING" =~ $2 ]] ; then
     modifyJob $1 "PRIO" "0"
-  elif [[ "running starting" =~ $2 ]] ; then
+  elif [[ "running" =~ $2 ]] ; then
     modifyJob $1 "PRIO" "1"
   elif [[ "RESUME STOPPED" =~ $2 ]] ; then
     modifyJob $1 "PRIO" "2"
@@ -343,8 +343,10 @@ changeStatus() {
     modifyJob $1 "PRIO" "6"
   elif [[ "canceled killed ERROR NOSTART" =~ $2 ]] ; then
     modifyJob $1 "PRIO" "8"
+    modifyJob $1 "PID" "-"
   elif [[ "done" =~ $2 ]] ; then
     modifyJob $1 "PRIO" "9"
+    modifyJob $1 "PID" "-"
   fi
 }
 
@@ -992,7 +994,7 @@ cmdExit() {
 startJob() {
   # Need parms: id
   procInfo "$1" "Start"
-  changeStatus "$1" "starting"
+  changeStatus "$1" "STARTING"
 
 if (( ! optSimulation )) ; then
   if ! cd "${jobData["$1:HOME"]}" 2>/dev/null ; then
@@ -1126,11 +1128,9 @@ cancelJob() {
     kill -KILL "$pid" 2>/dev/null
     changeStatus "$1" "killed"
     procInfo "$1" "Killed"
-    modifyJob "$1" "PID" " "
     # <<<<<< end ugly
     # >>>>>> That's all what here should be done
     # kill -KILL "${jobPids[$1]}"
-    # modifyJob "$1" "PID" " "
     # <<<<<< end good!
   else
     procInfo "$1" "Cancel"
@@ -1206,6 +1206,7 @@ processJobList() {
   do
     case $prio in
       0)  case $status in
+            STARTING) busyDrives+=($drive); ;;
             STOPPING) stopJob "$id"; stoppedJobs+=($id); ;;
             CANCEL)   cancelJob "$id"; ;;
             *)        error "FATAL: Ignored: ID:$id PRIO:$prio STATUS:$status"; ;;
@@ -1239,7 +1240,7 @@ processJobList() {
       ;;
 
       *)  # Should never happens
-          error "FATAL: Ignored: ID:$id PRIO:$prio STATUS:$status"
+          error "FATAL: WTF? ID:$id PRIO:$prio STATUS:$status"
       ;;
 
     esac
