@@ -50,6 +50,7 @@ declare -A jobData=()                           # Will filled with data of jobFi
 declare -A jobPids=()                           # PIDs of our jobs by our own ID
 declare    recheckJobList="0"                   # Set to 1 when some job has finished
 declare    stopRunning="0"                      # Set to 1 by command 'exit'
+declare    childChanged="0"                     # Set to 1 by trap CHLD
 declare    screenWidth="0"                      # Will adjusted by setScreenWidth()
 declare    daemonPID="0"                        # Used to notify/check our Daemon
 
@@ -846,7 +847,7 @@ cmdProcess() {
   set -o monitor
   trap "recheckJobList=1; info '${clearLine}Signaled* New or changed jobs *\n'" USR1 2>/dev/null
   trap "stopRunning=1; info '${clearLine}Received signal to stop, will wait for running jobs\n'" USR2 2>/dev/null
-  trap checkChilds CHLD
+  trap "childChanged=1" CHLD
   trap "rm $tmpDir/daemon-pid" EXIT
 
   echo "$$" > "$tmpDir/daemon-pid"
@@ -900,7 +901,7 @@ cmdStartDaemon() {
       set -o monitor
       trap "recheckJobList=1; printf '%(%FT%T)T Signaled* New or changed jobs *\n' '-1'" USR1 2>/dev/null
       trap "stopRunning=1; printf '%(%FT%T)T Signaled! I have to stop, will wait for running jobs\n' '-1'" USR2 2>/dev/null
-      trap checkChilds CHLD
+      trap "childChanged=1" CHLD
       trap "rm $tmpDir/daemon-pid" EXIT
 
       echo "$$" > "$tmpDir/daemon-pid"
@@ -933,9 +934,6 @@ cmdStartDaemon() {
           mv "$tmpDir/processStatus-$$" "$tmpDir/processStatus"
         fi
 
-        # BUG Improve communication with daemon. Read from FIFO or something
-        # instead. Now, if the signal arrives just short before we set these
-        # variables the info is lost. Happens rarely but, if it is ugly
         stopRunning="0"
         recheckJobList="0"
         sleep $sleepTime
@@ -1001,12 +999,13 @@ startJob() {
   # Need parms: id
   procInfo "$1" "Start"
   changeStatus "$1" "STARTING"
+  recheckJobList="1"
 
 if (( ! optSimulation )) ; then
   if ! cd "${jobData["$1:HOME"]}" 2>/dev/null ; then
     error "Job home is gone: ${jobData["$1:HOME"]}" 2>"$tmpDir/error.log-job-$1"
-    changeStatus "$1" "NOSTART"
     procInfo "$1" "StartERR"
+    changeStatus "$1" "NOSTART"
     return
   fi
 fi
@@ -1090,7 +1089,7 @@ fi
 
   cd "$OLDPWD"
   jobPids[$1]="$!"
-  modifyJob "$1" "PID" "$!" # FIXME: After a quick error would that be a wrong info
+  modifyJob "$1" "PID" "$!"
 }
 
 check4Pid() {
@@ -1132,8 +1131,8 @@ cancelJob() {
     unset jobPids[$1]
     disown "$pid" 2>/dev/null
     kill -KILL "$pid" 2>/dev/null
-    changeStatus "$1" "killed"
     procInfo "$1" "Killed"
+    changeStatus "$1" "killed"
     # <<<<<< end ugly
     # >>>>>> That's all what here should be done
     # kill -KILL "${jobPids[$1]}"
@@ -1160,33 +1159,37 @@ procInfo() {
 checkChilds() {
   # Thanks to michaelt
   # https://stackoverflow.com/a/21750255
+  setLock || { error "Childs not checked"; return 1; }
+
+  local id
   for id in ${!jobPids[*]}; do
     local pid=${jobPids[$id]}
     if kill -0 $pid 2>/dev/null ; then
       # Set job to running if not already done
-      [[ ${jobData["$id:PID"]} ]] && continue
+      [[ ${jobData["$id:STATUS"]} != "STARTING" ]] && continue
       changeStatus "$id" "running"
       jobData["$id:PID"]="$pid"
+      jobData["$id:STATUS"]="running"
     else
       recheckJobList="1"
       wait $pid 2>/dev/null
       local x=$?
 #       echo ">>Finished>$id<$pid:x=$x<<"
       if (( x == 0 )) ; then
-        changeStatus "$id" "done"
         procInfo "$id" "Done"
+        changeStatus "$id" "done"
       else
         if (( x == 127 )) ; then
           # Start up error, should never happens
-          changeStatus "$id" "NOSTART"
           procInfo "$id" "StartERR"
+          changeStatus "$id" "NOSTART"
         elif (( x == 137 )) ; then
-          changeStatus "$id" "killed"
           procInfo "$id" "Killed"
+          changeStatus "$id" "killed"
         else
           # Error while running
-          changeStatus "$id" "ERROR"
           procInfo "$id" "ERROR"
+          changeStatus "$id" "ERROR"
         fi
       fi
 
@@ -1194,6 +1197,10 @@ checkChilds() {
       unset jobPids[$id]
     fi
   done
+
+  unLock
+
+  childChanged="0"
 }
 
 processJobList() {
@@ -1201,6 +1208,7 @@ processJobList() {
   [[ -s "$jobFile" ]] || return
 
   setLock || { error "List not processed"; return 1; }
+
   updateJobList
   setScreenWidth
 
@@ -1251,8 +1259,6 @@ processJobList() {
 
     esac
 
-    (( recheckJobList )) && break
-
   done < "$jobList"
 
   unLock
@@ -1269,10 +1275,12 @@ processJobList() {
 
   # Let's do some fancy stuff
   local x=("-" "\\" "|" "/")  i="0"
-  while (( ${#jobPids[*]} && ! recheckJobList ))
+  while (( ${#jobPids[*]} ))
   do
     info "%s\r" "${x[((i++ % 4))]}"
     sleep 0.3
+    (( childChanged )) && checkChilds
+    (( recheckJobList )) && break
   done
 
   info "$clearLine"
