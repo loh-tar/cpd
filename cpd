@@ -701,8 +701,14 @@ cmdKill() {
   setLock || exitError "No jobs killed"
 
   for jobId ; do
-    if (( $(getJobValue "$jobId" "PRIO") > 7 )) ; then
+
+    local prio="$(getJobValue "$jobId" "PRIO")"
+
+    if (( prio > 7 )) ; then
       info "Ignore old job: $jobId ($(getJobValue "$jobId" "STATUS"))\n"
+      continue
+    elif (( prio == 0 )) ; then
+      info "Ignore job in process: $jobId ($(getJobValue "$jobId" "STATUS"))\n"
       continue
     fi
 
