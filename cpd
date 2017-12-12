@@ -701,6 +701,7 @@ cmdKill() {
   set -- $(expandJobIds "$@")
   setLock || exitError "No jobs killed"
 
+  local success="0"
   for jobId ; do
 
     local prio="$(getJobValue "$jobId" "PRIO")"
@@ -715,11 +716,12 @@ cmdKill() {
 
     out "Kill job $jobId: $(getJobValue $1 "FILES")"
     changeStatus "$jobId" "CANCEL"
+    success="1"
   done
 
   unLock
 
-  notifyDaemon
+  (( success )) && notifyDaemon
 }
 
 cmdResume() {
@@ -728,6 +730,7 @@ cmdResume() {
   set -- $(expandJobIds "$@")
   setLock || exitError "No jobs resumed"
 
+  local success="0"
   for jobId ; do
     local status="$(getJobValue "$jobId" "STATUS")"
     local prio="$(getJobValue "$jobId" "PRIO")"
@@ -735,6 +738,7 @@ cmdResume() {
       0)      # Stopping/Cancel
               out "Re-enqueue job: $jobId ($status)"
               changeStatus "$jobId" "pending"
+              success="1"
       ;;
       1)      # Running/Starting
               continue
@@ -743,6 +747,7 @@ cmdResume() {
               [[ "$status" == "RESUME" ]] && continue
               out "Resumme job: $jobId"
               changeStatus "$jobId" "RESUME"
+              success="1"
       ;;
       [3-7])  # Pending
               continue
@@ -751,6 +756,7 @@ cmdResume() {
               changeStatus "$jobId" "pending"
               rm -f "$tmpDir/msg.log-job-$jobId"
               rm -f "$tmpDir/error.log-job-$jobId"
+             success="1"
       ;;
     esac
 
@@ -758,7 +764,7 @@ cmdResume() {
 
   unLock
 
-  notifyDaemon
+  (( success )) && notifyDaemon
 }
 
 cmdStop() {
@@ -767,6 +773,7 @@ cmdStop() {
   set -- $(expandJobIds "$@")
   setLock || exitError "No jobs stopped"
 
+  local success="0"
   for jobId ; do
     local status="$(getJobValue "$jobId" "STATUS")"
     if [[ "$status" != "running" ]] ; then
@@ -776,11 +783,12 @@ cmdStop() {
 
     out "Stop job $jobId"
     changeStatus "$jobId" "STOPPING"
+    success="1"
   done
 
   unLock
 
-  notifyDaemon
+  (( success )) && notifyDaemon
 }
 
 cmdChangePrio() {
@@ -810,6 +818,7 @@ cmdChangePrio() {
 
   setLock || exitError "No job changed"
 
+  local success="0"
   for jobId ; do
     if [[ $(getJobValue "$jobId" "STATUS") != "pending" ]] ; then
       info "Ignore not pending job: $jobId\n"
@@ -822,9 +831,12 @@ cmdChangePrio() {
     adjustPrio "newPrio"
     out "Change priority of job $jobId from $oldPrio to $newPrio"
     modifyJob $jobId "PRIO" $newPrio
+    success="1"
   done
 
   unLock
+
+  (( success )) && notifyDaemon
 }
 
 cmdTidy() {
@@ -845,7 +857,7 @@ cmdProcess() {
   checkTmpDir
   cd "$tmpDir"
   set -o monitor
-  trap "recheckJobList=1; info '${clearLine}Signaled* New or changed jobs *\n'" USR1 2>/dev/null
+  trap "recheckJobList=1; info '${clearLine}* New or changed jobs by user *\n'" USR1 2>/dev/null
   trap "stopRunning=1; info '${clearLine}Received signal to stop, will wait for running jobs\n'" USR2 2>/dev/null
   trap "childChanged=1" CHLD
   trap "rm $tmpDir/daemon-pid" EXIT
@@ -899,7 +911,7 @@ cmdStartDaemon() {
       # FIXME: This part is almost a copy of cmdProcess,
       # split it into parts/functions to reduce redundancy
       set -o monitor
-      trap "recheckJobList=1; printf '%(%FT%T)T Signaled* New or changed jobs *\n' '-1'" USR1 2>/dev/null
+      trap "recheckJobList=1; printf '%(%FT%T)T * New or changed jobs by user *\n' '-1'" USR1 2>/dev/null
       trap "stopRunning=1; printf '%(%FT%T)T Signaled! I have to stop, will wait for running jobs\n' '-1'" USR2 2>/dev/null
       trap "childChanged=1" CHLD
       trap "rm $tmpDir/daemon-pid" EXIT
