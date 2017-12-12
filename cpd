@@ -514,8 +514,9 @@ outJobLine() {
   cutLeft "20" target
 
   printf -v txt "$format"                                     \
-    "$id" "${jobData["$id:PRIO"]}" "${jobData["$id:STATUS"]}" \
-    "${jobData["$id:SIZE"]}" "${jobData["$id:DRIVE"]}"        \
+    "$id" "${jobData["$id:STATUS"]}" "${jobData["$id:PRIO"]}" \
+    "${jobData["$id:PID"]}" "${jobData["$id:SIZE"]}"          \
+    "${jobData["$id:DONE"]}" "${jobData["$id:DRIVE"]}"        \
     "$target" "${jobData["$id:FILES"]}"
 
   out "$txt"
@@ -590,8 +591,8 @@ cmdShow() {
       ;;
 
     *)
-      local txt=" ID PRIO STATUS   SIZE  DRIVE            TARGET                FILES"
-      local format="%3s   %s  %-8s %4s  %-15s  %-20s  %s"
+      local txt=" ID STATUS PRIO   PID SIZE DONE DRIVE            TARGET                FILES"
+      local format="%3s %-8s %s  %5s %4s %4s %-15s  %-20s  %s"
       out "$txt"
       readJobs
       ;;&
@@ -1402,6 +1403,7 @@ cmdNewJob() {
   addToJobFile "$newId" "PRIO" "$(( 6 - optUserPrio ))"
   addToJobFile "$newId" "STATUS" "pending"
   addToJobFile "$newId" "DONE" "0%"
+  addToJobFile "$newId" "PID" "-"
   printf -v date "%(%FT%T)T" "-1"
   addToJobFile "$newId" "DATE" "$date"
   addToJobFile "$newId" "DRIVE" "$drive"
