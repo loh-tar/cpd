@@ -339,6 +339,8 @@ changeStatus() {
     modifyJob $1 "PRIO" "1"
   elif [[ "RESUME STOPPED" =~ $2 ]] ; then
     modifyJob $1 "PRIO" "2"
+  elif [[ "pending" =~ $2 ]] ; then
+    modifyJob $1 "PRIO" "6"
   elif [[ "canceled killed ERROR NOSTART" =~ $2 ]] ; then
     modifyJob $1 "PRIO" "8"
   elif [[ "done" =~ $2 ]] ; then
@@ -443,7 +445,7 @@ cmdHelp() {
 #         out "  P, process               Process jobs in foreground" TODO
         out "  K, kill <job>...         Kill a running or cancel a pending job"
         out "  p, prio <prio> <job>...  Change job PRIO to <prio> or 'PRIO=PRIO minus <prio>' if +-<prio>"
-        out "  r, resume <job>...       Resume jobs"
+        out "  r, resume <job>...       Resume stopped jobs or re-enqueue old jobs"
         out "  w, show [c]              Show jobs, c=i by ID, c=e errors, c=l job log, c=s daemon status"
         out "  s, stop <job>...         Stop jobs"
         out "  Y, tidy                  Tidy up all job data"
@@ -718,13 +720,30 @@ cmdResume() {
 
   for jobId ; do
     local status="$(getJobValue "$jobId" "STATUS")"
-    if [[ "$status" != "STOPPED" ]] ; then
-      info "Ignore not STOPPED job: $jobId ($status)\n"
-      continue
-    fi
+    local prio="$(getJobValue "$jobId" "PRIO")"
+    case $prio in
+      0)      # Stopping/Cancel
+              out "Re-enqueue job: $jobId ($status)"
+              changeStatus "$jobId" "pending"
+      ;;
+      1)      # Running/Starting
+              continue
+      ;;
+      2)      # Resume/Stopped
+              [[ "$status" == "RESUME" ]] && continue
+              out "Resumme job: $jobId"
+              changeStatus "$jobId" "RESUME"
+      ;;
+      [3-7])  # Pending
+              continue
+      ;;
+      [8-9])  out "Re-Enqueue old job: $jobId ($status)"
+              changeStatus "$jobId" "pending"
+              rm -f "$tmpDir/msg.log-job-$jobId"
+              rm -f "$tmpDir/error.log-job-$jobId"
+      ;;
+    esac
 
-    out "Resume job $jobId"
-    changeStatus "$jobId" "RESUME"
   done
 
   unLock

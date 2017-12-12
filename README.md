@@ -38,7 +38,7 @@ The purpose is collect copy jobs and start them only if the target drive is not 
     P, process               Process jobs in foreground or trigger daemon to continue
     K, kill <job>...         Kill a running or cancel a pending job
     p, prio <prio> <job>...  Change job PRIO to <prio> or 'PRIO=PRIO minus <prio>' if +-<prio>
-    r, resume <job>...       Resume jobs
+    r, resume <job>...       Resume stopped jobs or re-enqueue old jobs
     w, show [c]              Show jobs, c=i by ID, c=e errors, c=l job log, c=s daemon status
     s, stop <job>...         Stop jobs
     Y, tidy                  Tidy up all job data
