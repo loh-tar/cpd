@@ -479,6 +479,8 @@ cmdHelp() {
         out "    - Intern used is: 0 need attention, 1 running, 2 stopped, 8 error/killed, 9 done"
         out "  • ${txtBold}exit${txtClean} stops job processing, if so, or stops the daemon at all, if not"
         out "    - Adding a new job trigger the daemon to continue job processing, there is no blocking"
+        out "  • ${txtBold}show e${txtClean} take an optional ${txtBold}<job>${txtClean}"   \
+               " argument to show not all but some specific log"
         out "  • ${txtBold}tidy${txtClean} does nothing else than ${txtBold}'rm -rf $tmpDir'${txtClean}"
         out "  • With ${txtBold}-s${txtClean} will only run a sleep/forced-error job with a crude chosen time of a few seconds."
         fi
@@ -570,9 +572,10 @@ cmdShow() {
   setScreenWidth
 
   case "$type" in
-    e|-le)
-      read max < "$tmpDir/next-id"
-      for (( id=1; id < max; id++ ))
+    e)
+      shift; (( $# )) || set -- "-"
+      set -- $(expandJobIds "$@")
+      for id
       do
         [[ -s "$tmpDir/error.log-job-$id" ]] || continue
         out ">>>>> Error log of job $id"
@@ -581,7 +584,7 @@ cmdShow() {
       done
       ;;
 
-    l|-ll)
+    l)
       printFile "$tmpDir/job.log"
       ;;
 
@@ -600,7 +603,7 @@ cmdShow() {
       readJobs
       ;;&
 
-    i|-li)
+    i)
       read max < "$tmpDir/next-id"
       for (( id=1; id < max; id++ ))
       do
@@ -1538,7 +1541,7 @@ elif [[ "$cmd"         =~ ^r[1-9]+$ ]] ; then cmdResume "${cmd:1}" "$@"
 elif [[ "s"               == "$cmd" ]] ; then cmdStop "$@"
 elif [[ "$cmd"         =~ ^s[1-9]+$ ]] ; then cmdStop "${cmd:1}" "$@"
 elif [[ "w"               == "$cmd" ]] ; then cmdShow "$@"
-elif [[ "we"              == "$cmd" ]] ; then cmdShow "e"
+elif [[ "we"              == "$cmd" ]] ; then cmdShow "e" "$@"
 elif [[ "wi"              == "$cmd" ]] ; then cmdShow "i"
 elif [[ "wl"              == "$cmd" ]] ; then cmdShow "l"
 elif [[ "ws"              == "$cmd" ]] ; then cmdShow "s"
