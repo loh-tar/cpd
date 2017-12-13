@@ -1083,16 +1083,14 @@ fi
       fi
 
       if (( $SECONDS > 0 )) ; then
-        # Doing modifyJob here may be expensive, we waste already
-        # a lot of time. TODO:If we want an updated jobFile we could
-        # parse the job-status files in the daemon idle time
+        # Doing modifyJob here may be expensive, we waste already a lot of time
         writeJobStatus "$1"
         SECONDS="0"
       fi
 
     done < "$tmpDir/job-files-$1"
 
-    # Only without errors display 100% copied, FIXME but if we have an error the display may not correct
+    # Only without errors display 100% copied
     (( err )) || i="${jobData["$1:FCOUNT"]}"
 
     jobIsDone $1
@@ -1240,6 +1238,15 @@ processJobList() {
       ;;
 
       1)  busyDrives+=($drive)
+          # Grep/cut the data of interest from a file like this
+          # [Job:   8,  25K] [Done:  50%] [ToDo: Files: 2, Bytes: 12925]
+          local done=$(< <(cut -b24-28  "$tmpDir/job-status-$id" 2>/dev/null))
+          if [[ -n "$done" ]] ; then
+            if [[ "${jobData["$id:DONE"]}" != "$done" ]] ; then
+              jobData["$id:DONE"]="$done"
+              modifyJob "$id" "DONE" "$done"
+            fi
+          fi
       ;;
 
       2)  case $status in
@@ -1289,6 +1296,17 @@ processJobList() {
   local x=("-" "\\" "|" "/")  i="0"
   while (( ${#jobPids[*]} ))
   do
+    setLock
+    # Grep/cut the data of interest from a file like this
+    # [Job:   8,  25K] [Done:  50%] [ToDo: Files: 2, Bytes: 12925]
+    while read id done ; do
+      [[ -z "$id" ]] && continue
+      [[ "${jobData["$id:DONE"]}" == "$done" ]] && continue
+      jobData["$id:DONE"]="$done"
+      modifyJob "$id" "DONE" "$done"
+    done < <(cut -b6-9,24-28  "$tmpDir/job-status-"* 2>/dev/null)
+    unLock
+
     info "%s\r" "${x[((i++ % 4))]}"
     sleep 0.3
     (( childChanged )) && checkChilds
