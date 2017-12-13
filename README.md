@@ -125,7 +125,6 @@ that's all.
 ### TODO
 
   - Improve detection of true target drives
-  - BUG: Does not handle filenames with newline
   - Modify command _show w_ to take arguments to choose data to display
   - Solution to #6
   - Enhance this list

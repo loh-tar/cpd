@@ -357,8 +357,8 @@ readJobs() {
   while read line
   do
     val=${line#[0-9]*:[A-Z]*:}
-    key=${line%:${val}}
-    jobData[$key]=$val
+    key=${line%:"${val}"}
+    jobData[$key]="$val"
   done < "$jobFile"
 }
 
@@ -366,6 +366,21 @@ setScreenWidth() {
   (( optForcedScreenSize )) && return
   (( COLUMNS )) && { screenWidth="$COLUMNS"; return; }
   screenWidth=$(stty size 2>/dev/null |cut -d' ' -f2)
+}
+
+tameCrudeFileName() {
+  # Strip all stuff from name which cause a cluttered or ugly printing
+  local -n cfn="$1"
+  # When name was not quoted
+  cfn="${cfn//$'\n'/' '}"
+  cfn="${cfn//$'\r'/'!'}"
+  cfn="${cfn//$'\t'/' '}"
+  cfn="${cfn//$'\e'}"
+
+  # When name was quoted
+  cfn="${cfn//\\[nrt]/'!'}"
+  cfn="${cfn//"'$'!''"/' '}"
+  cfn="${cfn//"'"/}"
 }
 
 cutLeft() {
@@ -496,7 +511,7 @@ cmdHelp() {
         fi
         out "    $alterEgo -p1 /media/1b/foo *                       # New job with higher PRIO=5"
         out "    $alterEgo /media/1c/foo < /path/to/list-of-files"
-        out "    find * -type f -print | $alterEgo -p2 /media/1d/foo"
+        out "    find * -type f -print0 | $alterEgo -p2 /media/1d/foo"
         if (( ! isAlterEgo )) ; then
         out ""
         out "  Start the daemon in simulation mode with no stand by time, will exit when all is done"
@@ -1016,9 +1031,12 @@ startJob() {
   changeStatus "$1" "STARTING"
   recheckJobList="1"
 
+  local home=$(< "$tmpDir/job-$1-home")
+
 if (( ! optSimulation )) ; then
-  if ! cd "${jobData["$1:HOME"]}" 2>/dev/null ; then
-    error "Job home is gone: ${jobData["$1:HOME"]}" 2>"$tmpDir/error.log-job-$1"
+  if ! cd "$home" 2>/dev/null ; then
+    tameCrudeFileName home
+    error "Job home is gone: $home" 2>"$tmpDir/job-$1-error.log"
     procInfo "$1" "StartERR"
     changeStatus "$1" "NOSTART"
     return
@@ -1049,11 +1067,13 @@ fi
         > "$tmpDir/job-$1-status" ;
     }
 
+    local target=$(< "$tmpDir/job-$1-target")
+
     local total="0" err="0" i="0"
-    while read size file
+    while read -r size file
     do
       (( i++ ))
-      local cmd="cp ${jobData["$1:CPYOPT"]} ${file@Q} ${jobData["$1:TARGET"]@Q}"
+      local cmd="cp ${jobData["$1:CPYOPT"]} $file $target"
 
 if (( optSimulation )) ; then
       # Using logarithm of file size as sleep time
@@ -1395,39 +1415,53 @@ cmdNewJob() {
     # FIXME Looks still a little strange to me, can you simplify it?
     (( ${#optSourceList} )) && exec <"$optSourceList"
     local -a fl=() # File list
-    while read f ; do fl+=("$f"); done
+    # Thanks anubhava, https://stackoverflow.com/a/38573410
+    while IFS= read -r -d '' f ; do fl+=("$f"); done
     set -- "${fl[@]}"
   fi
 
+  # FIXME Is there a way to get rid of the xargs part?
   if [[ -n "$optExtraCopy" ]] ; then
     # Ensure all arguments are given, but don't go deep
-    find "$@" -maxdepth 0 -printf "%s\t%p\n"  >> "$newJobFiles"
+    find "$@" -maxdepth 0 -printf "%s\0%p\0" | xargs -0 printf "%s\t%q\n" >> "$newJobFiles"
   elif (( optRecursive )) ; then
-    find -L "$@" -printf "%s\t%p\n"  >> "$newJobFiles"
+    if (( optMerge )) ; then
+      find -L "$@" ! -type d -printf "%s\0%p\0" | xargs -0 printf "%s\t%q\n" >> "$newJobFiles"
+    else
+      find -L "$@" -printf "%s\0%p\0" | xargs -0 printf "%s\t%q\n" >> "$newJobFiles"
+    fi
   else
     # Ignore directories, they would cp cause to grumble without -r
-    find -L "$@" -type d -prune -o -printf "%s\t%p\n"  >> "$newJobFiles"
+    find -L "$@" -type d -prune -o -printf "%s\0%p\0" | xargs -0 printf "%s\t%q\n" >> "$newJobFiles"
   fi
 
-  [[ -s "$newJobFiles" ]] || exitError "No files to copy"
+  # In cases where nothing was found there is still \t\n in $newJobFiles
+  (( $(stat -c%s "$newJobFiles") < 3 )) && exitError "No files to copy"
+
   # Don't copy files twice
-  # Remove leading ./ from files, ensure file names match and looks nicer
-  sed -e "s/\t\.\//\t/" "$newJobFiles" | sort -rn | uniq > "$newJobFiles-uniq"
+  sort -rn "$newJobFiles" | uniq > "$newJobFiles-uniq"
   mv -f "$newJobFiles-uniq" "$newJobFiles"
 
   # Collect some statistics
-  local count=$(wc -l "$newJobFiles" | cut -d' ' -f1)
+  # Thanks Stéphane, https://unix.stackexchange.com/a/164993
+  local count=$(grep -c '^' "$newJobFiles")
   # Thanks Dimitre, https://stackoverflow.com/a/3096575
   local bytes=$(cut -f1 "$newJobFiles" | paste -sd+ | bc)
 
   # Build small file list only for user hint
   local files=$(cut -f2 "$newJobFiles" | head -n20 | paste -sd';')
+  tameCrudeFileName files
   # 200 is arbitrary chosen, long enough to fill one line
   (( ${#files} > 200 )) && files="${files:0:199}~"
 
   setLock || exitError "Job not added"
 
   newId=$(nextJobId)
+
+  mv "$newJobFiles" "$tmpDir/job-$newId-files"
+  printf "%q\n" "$PWD" > "$tmpDir/job-$newId-home"
+  printf "%q\n" "$target" > "$tmpDir/job-$newId-target"
+  tameCrudeFileName target
   local total=$(numfmt --to=si $bytes)
   local bytesPerFile=$(( bytes / count ))
 
@@ -1443,8 +1477,6 @@ cmdNewJob() {
   out "Options: $copyOptions"
   fi
 
-  mv "$newJobFiles" "$tmpDir/job-$newId-files"
-
   # PRIOrity is associated to STATUS as follows
   # STOPPING RESUME CANCEL running stopped pending error/kill/canceled done
   #    0        0     0        1      2      3-7           8             9
@@ -1452,10 +1484,8 @@ cmdNewJob() {
   addToJobFile "$newId" "STATUS" "pending"
   addToJobFile "$newId" "DONE" "0%"
   addToJobFile "$newId" "PID" "-"
-  printf -v date "%(%FT%T)T" "-1"
-  addToJobFile "$newId" "DATE" "$date"
+  addToJobFile "$newId" "DATE" "$(printf "%(%FT%T)T")"
   addToJobFile "$newId" "DRIVE" "$drive"
-  addToJobFile "$newId" "HOME" "$PWD"        # Needed, the daemon run in /
   addToJobFile "$newId" "TARGET" "$target"
   addToJobFile "$newId" "FILES" "$files"
   addToJobFile "$newId" "FCOUNT" "$count"
