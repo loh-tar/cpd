@@ -552,9 +552,9 @@ showStatus() {
 
     # Thanks to Daniel
     # https://unix.stackexchange.com/a/325581
-    if compgen -G "$tmpDir/job-status-*" > /dev/null; then
+    if compgen -G "$tmpDir/job-*-status" > /dev/null; then
       out "Running jobs:"
-      printFile "$tmpDir"/job-status-*
+      printFile "$tmpDir"/job-*-status
     fi
   else
     out "No running daemon"
@@ -577,9 +577,9 @@ cmdShow() {
       set -- $(expandJobIds "$@")
       for id
       do
-        [[ -s "$tmpDir/error.log-job-$id" ]] || continue
+        [[ -s "$tmpDir/job-$id-error.log" ]] || continue
         out ">>>>> Error log of job $id"
-        printFile "$tmpDir/error.log-job-$id"
+        printFile "$tmpDir/job-$id-error.log"
         out ""
       done
       ;;
@@ -757,8 +757,8 @@ cmdResume() {
       ;;
       [8-9])  out "Re-Enqueue old job: $jobId ($status)"
               changeStatus "$jobId" "pending"
-              rm -f "$tmpDir/msg.log-job-$jobId"
-              rm -f "$tmpDir/error.log-job-$jobId"
+              rm -f "$tmpDir/job-$jobId-msg.log"
+              rm -f "$tmpDir/job-$jobId-error.log"
              success="1"
       ;;
     esac
@@ -1035,7 +1035,7 @@ fi
 
       # Instead of rm we could finally writeJobStatus, but I think we should
       # only keep a file for running jobs
-      rm "$tmpDir/job-status-$1" 2>/dev/null
+      rm "$tmpDir/job-$1-status" 2>/dev/null
 
       exit $err
     }
@@ -1046,7 +1046,7 @@ fi
         "$(( 100 * $total / ${jobData["$1:BYTES"]} ))"      \
         "$(( ${jobData["$1:FCOUNT"]} - $i ))"               \
         "$(( ${jobData["$1:BYTES"]} - $total ))"            \
-        > "$tmpDir/job-status-$1" ;
+        > "$tmpDir/job-$1-status" ;
     }
 
     local total="0" err="0" i="0"
@@ -1075,7 +1075,7 @@ else
       printf "%(%FT%T)T [Job $1] %s\n" "-1" "$cmd" >> "$tmpDir/job.log"
 
 fi
-      (eval $cmd) >>"$tmpDir/msg.log-job-$1" 2>>"$tmpDir/error.log-job-$1"
+      (eval "$cmd") >>"$tmpDir/job-$1-msg.log" 2>>"$tmpDir/job-$1-error.log"
 
       if (( $? )) ; then
         err="1"
@@ -1091,7 +1091,7 @@ fi
         SECONDS="0"
       fi
 
-    done < "$tmpDir/job-files-$1"
+    done < "$tmpDir/job-$1-files"
 
     # Only without errors display 100% copied
     (( err )) || i="${jobData["$1:FCOUNT"]}"
@@ -1243,7 +1243,7 @@ processJobList() {
       1)  busyDrives+=($drive)
           # Grep/cut the data of interest from a file like this
           # [Job:   8,  25K] [Done:  50%] [ToDo: Files: 2, Bytes: 12925]
-          local done=$(< <(cut -b24-28  "$tmpDir/job-status-$id" 2>/dev/null))
+          local done=$(< <(cut -b24-28  "$tmpDir/job-$id-status" 2>/dev/null))
           if [[ -n "$done" ]] ; then
             if [[ "${jobData["$id:DONE"]}" != "$done" ]] ; then
               jobData["$id:DONE"]="$done"
@@ -1307,7 +1307,7 @@ processJobList() {
       [[ "${jobData["$id:DONE"]}" == "$done" ]] && continue
       jobData["$id:DONE"]="$done"
       modifyJob "$id" "DONE" "$done"
-    done < <(cut -b6-9,24-28  "$tmpDir/job-status-"* 2>/dev/null)
+    done < <(cut -b6-9,24-28  "$tmpDir"/job-*-status 2>/dev/null)
     unLock
 
     info "%s\r" "${x[((i++ % 4))]}"
@@ -1443,7 +1443,7 @@ cmdNewJob() {
   out "Options: $copyOptions"
   fi
 
-  mv "$newJobFiles" "$tmpDir/job-files-$newId"
+  mv "$newJobFiles" "$tmpDir/job-$newId-files"
 
   # PRIOrity is associated to STATUS as follows
   # STOPPING RESUME CANCEL running stopped pending error/kill/canceled done
