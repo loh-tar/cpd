@@ -1,0 +1,194 @@
+#!/bin/bash
+#
+#   validation - This file is part of cpd - The Copy Daemon
+#
+#   Copyright (C) 2017 loh.tar@googlemail.com
+#
+#   This program is free software; you can redistribute it and/or modify
+#   it under the terms of the GNU General Public License as published by
+#   the Free Software Foundation; either version 2 of the License, or
+#   (at your option) any later version.
+#
+#   This program is distributed in the hope that it will be useful,
+#   but WITHOUT ANY WARRANTY; without even the implied warranty of
+#   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#   GNU General Public License for more details.
+#
+#   You should have received a copy of the GNU General Public License
+#   along with this program; if not, write to the Free Software
+#   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
+#   MA 02110-1301, USA.
+
+cd $(dirname $(readlink -e $0 ))
+
+./makeTreeFruits || exit
+
+source ./test-config+lib.sh "only-config"
+
+cpdUserDir="$cpdDir/user-$(id -un)"
+testDir="$testDataDir/validation"
+
+cd ..
+cpd="$PWD/cpd"
+
+out() {
+  # Need parms: [format] text
+  local format="%s"
+  local msg
+  if (( $# > 1 )) ; then
+    if [[ "$1" =~ % ]]
+    then format="$1"; shift;
+    else msg="$@"
+    fi
+  fi
+
+  printf "$format\n" "$@"  | tee -a "$testDir/test.log"
+}
+
+prepareTest() {
+  out "Clean the test dir: $testDir"
+  rm -rf "$testDir"
+  mkdir -p "$testDir"
+
+  out "Ensure there is no running daemon"
+  while ! "$cpd" exit ; do sleep 1 ; done
+
+  out "Clean up old cpd job data"
+  "$cpd" tidy
+
+  out
+}
+
+runCommand() {
+  prog="$1"; shift
+  out "Run: $(basename "$prog") $*"
+  eval "$prog $@"
+}
+
+checkSum() {
+  local -n chk="$1"
+  cd "$2"
+  # Funny, without sorting the result can differ
+  chk="$(find . -print0 | sort -z | md5sum)"
+  cd "$OLDPWD"
+  echo "Checksum $chk" >> $testDir/test.log
+  df -Pk "$testDir" >> $testDir/test.log
+}
+
+testNo="0"
+testFail="0"
+testOk="0"
+runTest() {
+  let testNo+=1
+  out "Start  test %2s" "$testNo"
+  mkdir -p "$testDir/cp/$testNo"
+  mkdir -p "$testDir/cpd/$testNo"
+
+  # This is the same option processing as in cpd, consequentially isn't it?
+  local optRecursive="0" optMerge="0" optExtraCopy=""
+  OPTIND="1"
+  while getopts mo:r opt
+  do
+    case $opt in
+      m) optMerge="1"; ;;
+      o) optExtraCopy="$OPTARG"; ;;
+      r) optRecursive="1"; ;;
+      \?) exit 1; ;;
+    esac
+  done
+  shift $(( $OPTIND - 1 ))
+
+  # This is (almost) the same code as in cmdNewJob, consequentially isn't it?
+  local cOpt="-Lp" dOpt=""
+  if [[ -n "$optExtraCopy" ]] ; then
+    cOpt="$optExtraCopy"
+    dOpt="-o '$optExtraCopy'"
+  else
+    if (( optRecursive )) ; then
+      if (( optMerge )) ; then
+        cOpt+=" -r --backup=numbered"
+        dOpt="-mr"
+      else
+        cOpt+=" -r --parents"
+        dOpt="-r"
+      fi
+    elif (( optMerge )) ; then
+      cOpt+=" --backup=numbered"
+      dOpt="-m"
+    fi
+  fi
+
+  local chk1 chk2
+  # To keep this testing simple exec each job after adding by running P.
+  # If we would do it by a running daemon then we have to take care there is
+  # enough time for him to process the job. Feel free to send a patch where
+  # more is done then to sleep here some time
+  runCommand "$cpd" "$dOpt" newjob "$@" "$testDir/cpd/$testNo"
+  runCommand "$cpd" P
+  checkSum chk2 "$testDir/cpd/$testNo"
+
+  runCommand cp "$cOpt" "$@" "$testDir/cp/$testNo"
+  checkSum chk1 "$testDir/cp/$testNo"
+
+  local result="OK"
+  if [[ "$chk1" == "$chk2" ]] ; then
+    let testOk+=1
+  else
+    result="FAIL!"
+    let testFail+=1
+  fi
+
+  out "Result test %2s: %s\n" "$testNo" "$result"
+}
+
+isGNUcopy() {
+  # TODO Test this if it works as intended when running on non GNU/Linux system
+  cp --version 2>/dev/null |grep -q GNU
+}
+
+prepareTest
+
+# FIXME Add more meaningful/difficult tests
+runTest *
+runTest "$testDataDir/treeFruits/stacked/10/*"
+runTest "$testDataDir/treeFruits/divided/1/*"
+runTest "$testDataDir/crudeFiles/*"
+
+if isGNUcopy ; then
+runTest -m "$testDataDir/treeFruits/divided/*/*"
+
+# This test produce a result what I had not in mind...
+runTest -r "$testDataDir/treeFruits/stacked/*"
+# ...so let's do it again
+cd "$testDataDir/treeFruits/stacked/"
+runTest -r *
+cd "$OLDPWD"
+
+# These tests fail in sense of here done checks but they seamed to work as intended
+# -mr works only because of filtering directories from the argument list, doing
+# it here looks to me to be overkill and a little pointless. As this point
+# (should) work already all what is needed
+#
+# runTest -mr "$testDataDir/treeFruits/stacked/"
+# runTest -mr "$testDataDir/treeFruits/divided/"
+fi
+
+runCommand "$cpd" wi
+out
+
+echo "Logfile of this test? Try: cat $testDir/test.log"
+echo
+
+out "Total result of validation tests"
+out "  Runned tests: $testNo"
+out "  Test passed : $testOk"
+if (( testFail )) ; then
+  out "  Test failed : $testFail"
+  out
+  out "I'm so sorry :-("
+else
+  out
+  out "Looks good so far :-)"
+fi
+
+exit "$testFail"

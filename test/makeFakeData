@@ -1,0 +1,136 @@
+#!/bin/bash
+#
+#   makeFakeData - This file is part of cpd - The Copy Daemon
+#
+#   Copyright (C) 2017 loh.tar@googlemail.com
+#
+#   This program is free software; you can redistribute it and/or modify
+#   it under the terms of the GNU General Public License as published by
+#   the Free Software Foundation; either version 2 of the License, or
+#   (at your option) any later version.
+#
+#   This program is distributed in the hope that it will be useful,
+#   but WITHOUT ANY WARRANTY; without even the implied warranty of
+#   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#   GNU General Public License for more details.
+#
+#   You should have received a copy of the GNU General Public License
+#   along with this program; if not, write to the Free Software
+#   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
+#   MA 02110-1301, USA.
+
+cd $(dirname $(readlink -e $0 ))
+
+needSpace="308" # in 1k blocks, ask du -kc ...
+source ./test-config+lib.sh "$@"
+
+./makeSizedFiles "medium" "$1" || exit 1
+
+echo "Ensure no daemon is running"
+../cpd exit
+echo "Remove old jobs"
+../cpd tidy
+
+# Get our true target drive when we add new jobs
+drive=$(df -P "$testDataDir" | tail -n1 | cut -d' ' -f1)
+drive=${drive%%[0-9]*}
+
+user="user-$(id -un)"
+jobsFile="$cpdDir/$user/jobs"
+jobsSed="$cpdDir/$user/jobs-sed"
+
+moveSedJobs() {
+  mv "$jobsSed" "$jobsFile"
+}
+
+fakeDrive() {
+  sed "s/DRIVE:$drive/DRIVE:\/dev\/$1/g" "$jobsFile" > "$jobsSed"
+  moveSedJobs
+}
+
+fakeTarget() {
+  tdd="${testDataDir//\//\\\/}"
+  ftd="${1//\//\\\/}"
+  sed "s/TARGET:$tdd/TARGET:$ftd/g" "$jobsFile" > "$jobsSed"
+  moveSedJobs
+}
+
+fakeSource() {
+  fs="${1//\//\\\/}"
+  sed "s/sizedFiles\//$fs/g" "$jobsFile" > "$jobsSed"
+  moveSedJobs
+}
+
+fakeName() {
+  sed -e  "s/$1-1K/${2}2/g"     \
+      -e  "s/$1-10K/${2}3/g"    \
+      -e  "s/$1-100K/${2}4/g"   \
+      -e  "s/$1-1M/${2}5/g"     \
+      -e  "s/$1-5M/${2}6/g"     \
+      -e  "s/$1-10M/${2}7/g"    \
+      -e  "s/$1-100M/${2}8/g"   \
+      -e  "s/$1-10/${2}1/g"     \
+      -e  "s/file\([0-9]*\)-\([0-9]*\)[KM]/$2\1-\2/g" \
+    "$jobsFile" > "$jobsSed"
+
+  moveSedJobs
+}
+
+addJob() {
+  # Needs parms: filePattern options
+  eval ../cpd "$2" new "sizedFiles/$1" "$testDataDir" 1>/dev/null
+}
+
+setCount="0"
+makeJobSet() {
+  # Needs parms (drive): a b c
+  echo "Create set of fake jobs..."
+  let setCount+=1
+
+  addJob "file*-100K"
+  fakeName "xxx" "paper"
+  fakeTarget "/media/$1/documents/"
+  addJob "file1-*" "-p2"
+  fakeName "file1" "data"
+  fakeTarget "/media/$1/data"
+  addJob "file*-?M"
+  fakeName "xxx" "song"
+  fakeTarget "/media/$1/mediathek"
+  fakeDrive "sd$1"
+
+  addJob "file*-?M"
+  fakeName "xxx" "invoice"
+  fakeTarget "/media/$2/documents/"
+  addJob "file2-*" "-p2"
+  fakeName "file2" "data"
+  fakeTarget "/media/$2/data"
+  addJob "file*-??M"
+  fakeName "xxx" "clip"
+  fakeTarget "/media/$2/mediathek"
+  fakeDrive "sd$2"
+
+  addJob "*-100"  "-p1"
+  fakeName "xxx" "file"
+  fakeTarget "/media/$3/notes/"
+  fakeDrive "sd$3"
+
+  fakeSource ""
+}
+
+saveJobsAs() {
+  local info="Save $setCount sets as simulation: $1"
+  (( setCount == 1 )) && info="Save $setCount set as simulation: $1"
+  echo "$info"
+
+  mkdir -p "$fileDir/$1"
+  cp "$cpdDir/$user/"* "$fileDir/$1/"
+}
+
+makeJobSet "b" "c" "d"
+saveJobsAs "small"
+
+makeJobSet "c" "d" "b"
+makeJobSet "d" "b"  "c"
+saveJobsAs "medium"
+
+./makeSizedFiles "tidy"

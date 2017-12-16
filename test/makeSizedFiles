@@ -1,0 +1,86 @@
+#!/bin/bash
+#
+#   makeSizedFiles - This file is part of cpd - The Copy Daemon
+#
+#   Copyright (C) 2017 loh.tar@googlemail.com
+#
+#   This program is free software; you can redistribute it and/or modify
+#   it under the terms of the GNU General Public License as published by
+#   the Free Software Foundation; either version 2 of the License, or
+#   (at your option) any later version.
+#
+#   This program is distributed in the hope that it will be useful,
+#   but WITHOUT ANY WARRANTY; without even the implied warranty of
+#   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#   GNU General Public License for more details.
+#
+#   You should have received a copy of the GNU General Public License
+#   along with this program; if not, write to the Free Software
+#   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
+#   MA 02110-1301, USA.
+
+cd $(dirname $(readlink -e $0 ))
+
+sizeType="slim"
+copies="5"        # Modify as you like but adjust needSpace
+needSpace="620"   # in 1k blocks, ask du -kc ...
+
+if [[ "$1" == "medium" ]] ; then
+  shift
+  sizeType="medium"
+  copies="5"
+  needSpace="338540"
+elif [[ "$1" == "fat" ]] ; then
+  shift
+  sizeType="fat"
+  copies="5"
+  needSpace="440940"
+fi
+
+source ./test-config+lib.sh "$@"
+
+# Create some random filled test files the smart way
+# Thanks to Florian, https://stackoverflow.com/a/36990381
+
+makeFiles() {
+  # Parms: bs copies
+  printf "Create %3s files with a size of %5s\n" $2 $1
+  dd if=/dev/urandom of="$fileDir/file1-$1" bs=$1 count=1 2>/dev/null
+
+  for i in $(seq 2 $2); do
+    cp "$fileDir/file1-$1" "$fileDir/file$i-$1"
+  done
+}
+
+bloatFile() {
+  # Parms: source factor count
+  newName="$2${1:1}" # Well, works only if first digit is 1
+  for j in $(seq 1 $3); do
+    echo "Bloat file$j-$1 to file$j-$newName"
+    for i in $(seq 1 $2); do
+      cat "$fileDir/file$j-$1" >> "$fileDir/file$j-$newName"
+    done
+  done
+}
+
+makeFiles   10 $copies
+makeFiles  100 $copies
+makeFiles   1K $copies
+makeFiles  10K $copies
+makeFiles 100K $copies
+
+if [[ "$sizeType" != "slim" ]] ; then
+makeFiles  1M  $copies
+
+bloatFile  1M  5 $copies
+bloatFile  1M 10 $copies
+bloatFile  1M 50 $copies
+fi
+
+if [[ "$sizeType" == "fat" ]] ; then
+# In-comment when you are sure
+# bloatFile 10M 10 $copies
+bloatFile 10M 10 1
+fi
+
+finishCreation

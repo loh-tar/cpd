@@ -1078,11 +1078,11 @@ fi
 if (( optSimulation )) ; then
       # Using logarithm of file size as sleep time
       # https://stackoverflow.com/a/7962297
-      local st=$(echo "scale=2; l($size)/l(8)" | bc -l)
+      local st=$(echo "scale=2; x=l($size)/l(8000); x*x" | bc -l)
       (( size )) || st="1" # When size is 0, log is negative, and then grumble sleep
 
-      case "$(($RANDOM % 9))" in
-        2)  cmd2="echo ERRORJob $1; sleep 1; echo 'What ever was wrong' >&2; exit 1;" ; ;;
+      case "$(($RANDOM % 30))" in
+        0)  cmd2="echo ERRORJob $1; sleep 1; echo 'What ever was wrong' >&2; exit 1;" ; ;;
         *)  cmd2="echo 'SLEEPJob $1 - ${st}s with file: ($size) $file'; sleep ${st};" ; ;;
       esac
 

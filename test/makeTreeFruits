@@ -1,0 +1,48 @@
+#!/bin/bash
+#
+#   makeTestTree - This file is part of cpd - The Copy Daemon
+#
+#   Copyright (C) 2017 loh.tar@googlemail.com
+#
+#   This program is free software; you can redistribute it and/or modify
+#   it under the terms of the GNU General Public License as published by
+#   the Free Software Foundation; either version 2 of the License, or
+#   (at your option) any later version.
+#
+#   This program is distributed in the hope that it will be useful,
+#   but WITHOUT ANY WARRANTY; without even the implied warranty of
+#   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#   GNU General Public License for more details.
+#
+#   You should have received a copy of the GNU General Public License
+#   along with this program; if not, write to the Free Software
+#   Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
+#   MA 02110-1301, USA.
+
+cd $(dirname $(readlink -e $0 ))
+
+needSpace="1500" # Size is not fixed, in 1k blocks, ask du -kc ...
+source ./test-config+lib.sh "$@"
+
+./makeSizedFiles "$1" || exit 1
+./makeCrudeFiles "$1" || exit 1
+
+for i in {1..5}
+do
+  echo "Create dir: $fileDir/divided/$i"
+  mkdir -p "$fileDir/divided/$i"
+  find "$testDataDir/"{crudeFiles,sizedFiles} -name *file$i-* -size -10M \
+    -exec cp {} "$fileDir/divided/$i/" \;
+done
+
+dir="$fileDir/stacked"
+for i in 10 100 1K 10K 100K
+do
+  dir="$dir/$i"
+  echo "Create dir: $dir"
+  mkdir -p "$dir"
+  find "$testDataDir/sizedFiles" -name *file[1-5]-$i -size -10M \
+    -exec cp {} "$dir/" \;
+done
+
+finishCreation
