@@ -1,10 +1,18 @@
 ## cpd - The copy daemon
 
-_cpd_ is a pure _bash_ script without any special requirements except a _*NIX Box_ and a not to old _bash_ version.
+_cpd_ is a pure _bash_ script without any special requirements except a
+ _*NIX Box_ and a not to old _bash_ version.
 
-The purpose is collect copy jobs and start them only if the target drive is not busy by an other copy job under _cpd_ supervision.
+Furthermore may it still a little _GNUish_. I can't, and will not, test it with
+ other Unices than _ArchLinux_ but patches and bug reports are welcome.
 
-### Project Status is pre release
+The purpose is collect copy jobs and start them only if the target drive is not
+ busy by any other copy job under _cpd_ supervision.
+
+### Last (and very first) version is v0.1 (Dez 2017)
+
+There are things which could be improved, or fixed, but I think it is now almost
+ feature complete. So someone would call it a _1.0 RCx_ release.
 
 ### Usage
 
@@ -64,7 +72,7 @@ Process the jobs in the foreground...
 
 ...and take a look how it is going
 
-    watch -n1 cpd w
+    watch -n1 cpd wi
 
 or
 
@@ -72,42 +80,54 @@ or
 
 ### Simulation Mode
 
-Instead of calling _cp_ with all job parameter, there will only start a _sleep/forced-error job_ with a crude chosen time of a few seconds.
+Instead of calling _cp_ with all job parameter, there will only start a
+ _sleep/forced-error job_ with a crude chosen time of a few seconds.
 
 ### Running Test
 
-    $ ./runTest
-    Start with clean tmp dir
+    $ ./test/simulation
+    Prepare test with clean tmp dir
 
-    Run: ./cpd w
-    ID PRIO STATUS   SIZE  DRIVE            TARGET                FILES
-      4   3  pending    7K  luks-as2dws34xy  /media/luks/foo       data1
-      5   3  pending    9M  luks-as2dws34xy  /media/luks/foo       secret stuff important data
-      6   3  pending   34K  /dev/sdc         /media/c/foo          cpd cpd1
-      3   5  pending   21K  /dev/sdd         /media/d/foo          /media/data/raz /media/data/baz
-      1   6  pending   705  /dev/sda         /media/a/foo          /media/data/foo
-      2   7  pending    7K  /dev/sda         /media/a/foo          /media/data/bar
+    Run: ./cpd show
+    ID STATUS PRIO   PID SIZE DONE DRIVE            TARGET                FILES
+      2 pending  4      -  70M   0% /dev/sdb         /media/b/data         data1-50;data7;dat~
+      5 pending  4      -  70M   0% /dev/sdc         /media/c/data         data2-50;data7;dat~
+      7 pending  5      -  500   0% /dev/sdd         /media/d/notes/       file5-100;file4-10~
+      1 pending  6      - 512K   0% /dev/sdb         /media/b/documents/   paper5-100;paper4-~
+      3 pending  6      -  32M   0% /dev/sdb         /media/b/mediathek    song5-5;song4-5;so~
+      4 pending  6      -  32M   0% /dev/sdc         /media/c/documents/   invoice5-5;invoice~
+      6 pending  6      - 315M   0% /dev/sdc         /media/c/mediathek    clip5-50;clip4-50;~
 
-    Run: ./cpd -s P
+    Run: ./cpd -s process
     Running a simulation, nothing will copied
-    Start   [  4] [luks-as2dws34xy]      /media/luks/foo <- data1
-    Start   [  6] [/dev/sdc       ]         /media/c/foo <- cpd cpd1
-    Start   [  3] [/dev/sdd       ]         /media/d/foo <- /media/data/raz /media/data/baz
-    Start   [  1] [/dev/sda       ]         /media/a/foo <- /media/data/foo
-    Stop    [  4] [luks-as2dws34xy]      /media/luks/foo <- data1
-    Start   [  5] [luks-as2dws34xy]      /media/luks/foo <- secret stuff important data
-    Killed  [  5] [luks-as2dws34xy]      /media/luks/foo <- secret stuff important data
-    Killed  [  6] [/dev/sdc       ]         /media/c/foo <- cpd cpd1
-    Resume  [  4] [luks-as2dws34xy]      /media/luks/foo <- data1
-    Done    [  1] [/dev/sda       ]         /media/a/foo <- /media/data/foo
-    Start   [  2] [/dev/sda       ]         /media/a/foo <- /media/data/bar
-    Done    [  4] [luks-as2dws34xy]      /media/luks/foo <- data1
-    Done    [  2] [/dev/sda       ]         /media/a/foo <- /media/data/bar
-    Done    [  3] [/dev/sdd       ]         /media/d/foo <- /media/data/raz /media/data/baz
+    Start   [  2] [/dev/sdb       ]        /media/b/data <- data1-50;data7;data6;data5;data4;>
+    Start   [  5] [/dev/sdc       ]        /media/c/data <- data2-50;data7;data6;data5;data4;>
+    Start   [  7] [/dev/sdd       ]      /media/d/notes/ <- file5-100;file4-100;file3-100;fil>
+    * New or changed jobs by user *
+    Stop    [  2] [/dev/sdb       ]        /media/b/data <- data1-50;data7;data6;data5;data4;>
+    Start   [  1] [/dev/sdb       ]  /media/b/documents/ <- paper5-100;paper4-100;paper3-100;>
+    * New or changed jobs by user *
+    Done    [  7] [/dev/sdd       ]      /media/d/notes/ <- file5-100;file4-100;file3-100;fil>
+    Killed  [  5] [/dev/sdc       ]        /media/c/data <- data2-50;data7;data6;data5;data4;>
+    Start   [  4] [/dev/sdc       ]  /media/c/documents/ <- invoice5-5;invoice4-5;invoice3-5;>
+    * New or changed jobs by user *
+    Done    [  1] [/dev/sdb       ]  /media/b/documents/ <- paper5-100;paper4-100;paper3-100;>
+    Resume  [  2] [/dev/sdb       ]        /media/b/data <- data1-50;data7;data6;data5;data4;>
+    ERROR   [  2] [/dev/sdb       ]        /media/b/data <- data1-50;data7;data6;data5;data4;>
+    Start   [  3] [/dev/sdb       ]   /media/b/mediathek <- song5-5;song4-5;song3-5;song2-5;s>
+    Done    [  4] [/dev/sdc       ]  /media/c/documents/ <- invoice5-5;invoice4-5;invoice3-5;>
+    Start   [  5] [/dev/sdc       ]        /media/c/data <- data2-50;data7;data6;data5;data4;>
+    ERROR   [  5] [/dev/sdc       ]        /media/c/data <- data2-50;data7;data6;data5;data4;>
+    Start   [  6] [/dev/sdc       ]   /media/c/mediathek <- clip5-50;clip4-50;clip3-50;clip2->
+    Done    [  3] [/dev/sdb       ]   /media/b/mediathek <- song5-5;song4-5;song3-5;song2-5;s>
+    Done    [  6] [/dev/sdc       ]   /media/c/mediathek <- clip5-50;clip4-50;clip3-50;clip2->
     All done
 
-    Run: ./cpd w e
-    >>>>> Error log of job 6
+    Run: ./cpd show e
+    >>>>> Error log of job 2
+    What ever was wrong
+
+    >>>>> Error log of job 5
     What ever was wrong
 
 **Note:** If there are errors to read, they are features, but you may find true bugs
@@ -116,7 +136,7 @@ Instead of calling _cp_ with all job parameter, there will only start a _sleep/f
 
 #### From Source
 
-Copy _cpd_ somewhere to your $PATH and create a symlink there at your taste, e.g.
+Copy _cpd_ somewhere to your _$PATH_ and create a symlink there at your taste, e.g.
 
     ln -s cpd cpc
 
@@ -125,9 +145,9 @@ that's all.
 ### TODO
 
   - Improve detection of true target drives
+  - Review logging stuff, now it looks a little haphazard
   - Modify command _show w_ to take arguments to choose data to display
-  - Solution to #6
-  - Enhance this list
+  - Solution to #6 nice/ionice
 
 ### Things they have to wait for a past 1.0 release
 
